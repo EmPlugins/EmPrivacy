@@ -4,7 +4,8 @@
 
 ## Changes
 
-- No user-visible changes.
+- Compatibility: CI targets **EmDash `0.9.0`**; peer/dev dependency on `emdash` is **`^0.9.0`**.
+- Plugin manifest: capability renamed from deprecated `page:inject` to **`hooks.page-fragments:register`** (EmDash 0.9.x).
 
 # emprivacy v0.1.6
 

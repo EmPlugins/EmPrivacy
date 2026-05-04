@@ -23,7 +23,7 @@ export {
 
 /**
  * EmDash plugin descriptor — add to `plugins: []` in `emdash({ ... })` inside `astro.config`.
- * Requires **trusted** registration so `page:fragments` runs (sandboxed plugins cannot inject fragments).
+ * Requires **trusted** registration so `page:metadata` / `page:fragments` run (sandboxed plugins cannot inject fragments).
  */
 export function emprivacyPlugin(): PluginDescriptor {
 	return {
@@ -31,7 +31,7 @@ export function emprivacyPlugin(): PluginDescriptor {
 		version: VERSION,
 		format: "standard",
 		entrypoint: "emprivacy/sandbox",
-		capabilities: ["page:inject"],
+		capabilities: ["hooks.page-fragments:register"],
 		storage: {
 			consentEvents: { indexes: ["createdAt", "policyVersion"] },
 		},
