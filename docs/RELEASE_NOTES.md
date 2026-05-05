@@ -7,6 +7,12 @@
 - Compatibility: CI targets **EmDash `0.9.0`**; peer/dev dependency on `emdash` is **`^0.9.0`**.
 - Plugin manifest: capability renamed from deprecated `page:inject` to **`hooks.page-fragments:register`** (EmDash 0.9.x).
 
+# emprivacy v0.2.1
+
+## Changes
+
+- **Repository** — Canonical GitHub URLs now use **[EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy)** (`package.json` `repository` / `bugs` / `homepage`, admin plugin settings doc link, and permalinks in this file). No runtime behavior change.
+
 # emprivacy v0.1.6
 
 ## Changes
@@ -32,7 +38,7 @@
 
 - Pin **Kysely** to a patched version via `overrides` so `npm audit` reports **0** high-severity issues from the `emdash` dev dependency tree (Kysely advisories).
 - Add `npm run audit` to CI and to `prepublishOnly` / `preversion` so releases fail if new audit findings appear.
-- New [docs/DEVELOPMENT.md](https://github.com/emdash-cms/EmPrivacy/blob/v0.1.3/docs/DEVELOPMENT.md) (dependency, audit, and deprecation context for maintainers).
+- New [docs/DEVELOPMENT.md](https://github.com/EmPlugins/EmPrivacy/blob/v0.1.3/docs/DEVELOPMENT.md) (dependency, audit, and deprecation context for maintainers).
 
 # emprivacy v0.1.2
 
@@ -74,13 +80,13 @@ First published **npm** release of **EmPrivacy**, an open source [EmDash](https:
 npm install emprivacy@^0.1.0
 ```
 
-Register `emprivacyPlugin()` early in `emdash({ plugins: [...] })` and wire EmDash layout components (`EmDashHead`, body slots, etc.). Full quick start: [README](https://github.com/emdash-cms/EmPrivacy/blob/v0.1.0/README.md).
+Register `emprivacyPlugin()` early in `emdash({ plugins: [...] })` and wire EmDash layout components (`EmDashHead`, body slots, etc.). Full quick start: [README](https://github.com/EmPlugins/EmPrivacy/blob/v0.1.0/README.md).
 
 ## Documentation
 
-- [Getting started](https://github.com/emdash-cms/EmPrivacy/blob/v0.1.0/docs/GETTING_STARTED.md)
-- [Testing / pre-deploy checklist](https://github.com/emdash-cms/EmPrivacy/blob/v0.1.0/docs/TESTING.md)
-- [Releases & semver](https://github.com/emdash-cms/EmPrivacy/blob/v0.1.0/docs/RELEASES.md)
+- [Getting started](https://github.com/EmPlugins/EmPrivacy/blob/v0.1.0/docs/GETTING_STARTED.md)
+- [Testing / pre-deploy checklist](https://github.com/EmPlugins/EmPrivacy/blob/v0.1.0/docs/TESTING.md)
+- [Releases & semver](https://github.com/EmPlugins/EmPrivacy/blob/v0.1.0/docs/RELEASES.md)
 
 ## Legal
 

@@ -1,3 +1,3 @@
 // SPDX-License-Identifier: MIT
 
-export const VERSION = "0.1.6" as const;
+export const VERSION = "0.2.1" as const;
