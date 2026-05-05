@@ -4,6 +4,8 @@
 
 Thanks for helping improve EmPrivacy.
 
+Use **[github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy)** for issues and pull requests.
+
 ## Licensing and sign-offs
 
 ### SPDX headers in new files

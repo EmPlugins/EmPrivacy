@@ -18,7 +18,7 @@ npm install emprivacy
 
 Use a **semver range** if you want controlled upgrades, for example `emprivacy@^0.1.0`. Versioning policy and maintainer release steps: [docs/RELEASES.md](docs/RELEASES.md).
 
-Or use a Git dependency / `npm link` while developing.
+Or use a Git dependency / `npm link` while developing. **Source and issues:** [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
 
 ## Quick start
 

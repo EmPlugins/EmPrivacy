@@ -59,7 +59,7 @@ npm pack --dry-run
    git push --follow-tags
    ```
 
-5. On GitHub, open **Releases → Draft a new release**, choose the new tag (e.g. `v0.1.1`), title it `v0.1.1`, and summarize user-facing changes.
+5. On GitHub ([**EmPlugins/EmPrivacy → Releases**](https://github.com/EmPlugins/EmPrivacy/releases)), open **Draft a new release**, choose the new tag (e.g. `v0.1.1`), title it `v0.1.1`, and summarize user-facing changes.
 
 ## Tags
 
