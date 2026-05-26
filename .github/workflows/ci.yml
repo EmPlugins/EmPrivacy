@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         emdash_version:
-          - 0.9.0
+          - 0.14.0
     name: test (emdash@${{ matrix.emdash_version }})
     steps:
       - uses: actions/checkout@v4

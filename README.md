@@ -6,7 +6,7 @@
 
 ## Requirements
 
-- **EmDash** `^0.9.0` (**tested with `0.9.0`**; re-test on your deployed minor when upgrading).
+- **EmDash** `>=0.14.0` (**tested with `0.14.0`**; re-test on your deployed minor when upgrading). Sites on EmDash 0.9–0.13: use **emprivacy 0.2.x**.
 - Plugins registered in **`astro.config`** in **trusted** mode (the `plugins: []` array).  
   **Sandboxed** marketplace plugins **cannot** use `page:fragments`; EmPrivacy needs the `hooks.page-fragments:register` capability so head/body contributions run on public pages. See [Plugin System Overview](https://docs.emdashcms.com/plugins/overview/).
 

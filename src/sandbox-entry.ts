@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import { definePlugin } from "emdash";
-import type {
-	PageFragmentContribution,
-	PageFragmentEvent,
-	PageMetadataContribution,
-	PageMetadataEvent,
-	PluginContext,
-} from "emdash";
+import type { PageFragmentContribution, PageMetadataContribution } from "emdash";
+import type { PluginContext, SandboxedPlugin, SandboxedRequest } from "emdash/plugin";
 import { z } from "zod";
 
 import {
@@ -43,6 +37,14 @@ async function loadConfig(ctx: PluginContext): Promise<EmprivacyConfig> {
 
 async function saveConfigString(ctx: PluginContext, json: string): Promise<void> {
 	await ctx.kv.set(KV_KEY, json);
+}
+
+function requestHeader(request: SandboxedRequest, name: string): string | null {
+	const target = name.toLowerCase();
+	for (const [key, value] of Object.entries(request.headers)) {
+		if (key.toLowerCase() === target) return value;
+	}
+	return null;
 }
 
 /** Path-only record URL for browser fetch (same origin). */
@@ -369,9 +371,9 @@ else mount();
 })();`;
 }
 
-export default definePlugin({
+export default {
 	hooks: {
-		"plugin:install": async (_e: unknown, ctx: PluginContext) => {
+		"plugin:install": async (_e, ctx) => {
 			const existing = (await ctx.kv.get(KV_KEY)) as string | null;
 			if (!existing) {
 				await saveConfigString(ctx, JSON.stringify(normalizeConfig({})));
@@ -379,10 +381,7 @@ export default definePlugin({
 			}
 		},
 		"page:metadata": {
-			handler: async (
-				_e: PageMetadataEvent,
-				ctx: PluginContext,
-			): Promise<PageMetadataContribution | PageMetadataContribution[] | null> => {
+			handler: async (_e, ctx) => {
 				const cfg = await loadConfig(ctx);
 				const out: PageMetadataContribution[] = [];
 				const privacyHref = absolutePolicyHref(cfg.privacyPolicyUrl, ctx);
@@ -409,10 +408,7 @@ export default definePlugin({
 			},
 		},
 		"page:fragments": {
-			handler: async (
-				_e: PageFragmentEvent,
-				ctx: PluginContext,
-			): Promise<PageFragmentContribution | PageFragmentContribution[] | null> => {
+			handler: async (_e, ctx) => {
 				const cfg = await loadConfig(ctx);
 				const privacyResolved = absolutePolicyHref(cfg.privacyPolicyUrl, ctx) ?? "";
 				const cookieResolved = cfg.cookiePolicyUrl
@@ -488,7 +484,7 @@ export default definePlugin({
 	},
 	routes: {
 		admin: {
-			handler: async (routeCtx: { input?: unknown }, ctx: PluginContext) => {
+			handler: async (routeCtx, ctx) => {
 				const interaction = routeCtx.input as
 					| { type: string; page?: string; action_id?: string; values?: Record<string, unknown> }
 					| undefined;
@@ -542,17 +538,14 @@ export default definePlugin({
 		record: {
 			public: true,
 			input: recordInput,
-			handler: async (
-				routeCtx: { input: unknown; request: Request },
-				ctx: PluginContext,
-			) => {
+			handler: async (routeCtx, ctx) => {
 				if (routeCtx.request.method !== "POST") {
 					return { ok: false };
 				}
 				// Same-origin hardening: this is a public route, but it should be called by pages on the site.
 				// If the browser sends an Origin header, enforce it to block cross-site POSTs (basic CSRF mitigation).
 				try {
-					const origin = routeCtx.request.headers.get("origin");
+					const origin = requestHeader(routeCtx.request, "origin");
 					if (origin) {
 						const expected = new URL(ctx.url("/")).origin;
 						if (origin !== expected) return new Response("forbidden", { status: 403 });
@@ -561,7 +554,7 @@ export default definePlugin({
 					return new Response("bad_request", { status: 400 });
 				}
 
-				const ct = routeCtx.request.headers.get("content-type") ?? "";
+				const ct = requestHeader(routeCtx.request, "content-type") ?? "";
 				if (!ct.toLowerCase().includes("application/json")) {
 					return new Response("unsupported_media_type", { status: 415 });
 				}
@@ -591,7 +584,7 @@ export default definePlugin({
 						return { ok: false, reason: "log_full" };
 					}
 				} catch {
-					// If query fails, proceed (storage may not support query in older EmDash versions).
+					// Best-effort cap; proceed if query is unavailable.
 				}
 				await ctx.storage.consentEvents.put(
 					`${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -601,7 +594,7 @@ export default definePlugin({
 			},
 		},
 	},
-});
+} satisfies SandboxedPlugin;
 
 async function buildSettingsPage(ctx: PluginContext) {
 	const cfg = await loadConfig(ctx);

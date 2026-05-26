@@ -2,10 +2,14 @@
 
 # Unreleased
 
+# emprivacy v0.3.0
+
 ## Changes
 
-- Compatibility: CI targets **EmDash `0.9.0`**; peer/dev dependency on `emdash` is **`^0.9.0`**.
-- Plugin manifest: capability renamed from deprecated `page:inject` to **`hooks.page-fragments:register`** (EmDash 0.9.x).
+- **EmDash `>=0.14.0` required** — peer and dev dependency minimum raised from `^0.9.0`. Sites on EmDash 0.9–0.13 should stay on **emprivacy 0.2.x**.
+- **Plugin entry** — `src/sandbox-entry.ts` now default-exports a bare `{ hooks, routes } satisfies SandboxedPlugin` object (types from `emdash/plugin`), matching EmDash 0.13+ standard-format plugins and `@emdash-cms/plugin-audit-log`. No runtime `definePlugin()` import.
+- **CI** — matrix targets **EmDash `0.14.0`**.
+- **Kysely override** — Bumped to **`0.29.2`** so `npm audit` stays clean with `emdash@0.14.x` (see [docs/DEVELOPMENT.md](DEVELOPMENT.md)).
 
 # emprivacy v0.2.1
 

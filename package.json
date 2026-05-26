@@ -1,7 +1,7 @@
 {
   "//": "SPDX-License-Identifier: MIT",
   "name": "emprivacy",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Cookie consent and privacy notices for EmDash (GDPR, CCPA/CIPA-oriented configuration)",
   "type": "module",
   "main": "dist/index.mjs",
@@ -37,13 +37,13 @@
   "author": "",
   "license": "MIT",
   "peerDependencies": {
-    "emdash": "^0.9.0"
+    "emdash": ">=0.14.0"
   },
   "dependencies": {
     "zod": "^4.3.5"
   },
   "devDependencies": {
-    "emdash": "^0.9.0",
+    "emdash": "^0.14.0",
     "tsdown": "^0.20.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
@@ -60,7 +60,7 @@
     "access": "public"
   },
   "overrides": {
-    "kysely": "0.28.16"
+    "kysely": "0.29.2"
   },
   "scripts": {
     "sync:version": "node scripts/write-version.mjs",

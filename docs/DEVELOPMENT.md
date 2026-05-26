@@ -10,9 +10,9 @@ Runtime dependencies for the published package are **`zod`** only. **EmDash** is
 
 The `emdash` dev dependency pulls in a SQL stack that historically resolved **`kysely@0.27.x`**, which is affected by advisories (for example [GHSA-wmrf-hv6w-mr66](https://github.com/advisories/GHSA-wmrf-hv6w-mr66) and [GHSA-8cpq-38p9-67gx](https://github.com/advisories/GHSA-8cpq-38p9-67gx)) until patched releases.
 
-**This repository pins a safe Kysely** via `overrides` in the root `package.json` (currently `0.28.16`, which is at or above the patched range for those issues). Regenerate the lockfile with `npm install` after changing overrides.
+**This repository pins a safe Kysely** via `overrides` in the root `package.json` (currently `0.29.2`, above the patched range for known advisories). Regenerate the lockfile with `npm install` after changing overrides.
 
-- Full dev tree: `npm audit` should report **0 vulnerabilities** after a clean `npm ci`.
+- Full dev tree: `npm audit` should report **0 vulnerabilities** after a clean `npm ci`. If upstream `emdash@0.14.x` introduces new transitive advisories, track them here and adjust `overrides` when a patched release exists.
 - Production install only: `npm audit --omit=dev` reflects **only** published runtime deps (currently `zod`).
 
 ## Deprecation warnings you may still see
