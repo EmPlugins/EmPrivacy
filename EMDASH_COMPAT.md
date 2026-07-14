@@ -22,9 +22,9 @@ See [docs/maintainer-release.md](docs/maintainer-release.md).
 ## Consumer install
 
 ```bash
-pnpm add emprivacy
+pnpm add @emplugins/emprivacy
 # or
-npm install emprivacy
+npm install @emplugins/emprivacy
 ```
 
 Peer dependency: **`emdash >=0.14.0`** on your EmDash site.

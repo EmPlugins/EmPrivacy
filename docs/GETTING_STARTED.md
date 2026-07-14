@@ -21,10 +21,10 @@ This guide is for site builders who want cookie consent working on an **EmDash**
 ## Step 1 — Install the package
 
 ```bash
-npm install emprivacy
+npm install @emplugins/emprivacy
 ```
 
-The package is versioned with **semver** on npm; to pin a line, use a range such as `emprivacy@^0.1.0`. See [RELEASES.md](./RELEASES.md) for how releases are numbered.
+The package is versioned with **semver** on npm; to pin a line, use a range such as `@emplugins/emprivacy@^1.0.0`. See [RELEASES.md](./RELEASES.md) for how releases are numbered.
 
 ---
 
@@ -35,7 +35,7 @@ Open `astro.config.mjs` (or `.ts`).
 1. Import the plugin:
 
    ```ts
-   import { emprivacyPlugin } from "emprivacy";
+   import { emprivacyPlugin } from "@emplugins/emprivacy";
    ```
 
 2. Add **`emprivacyPlugin()`** to **`emdash({ plugins: [...] })`**. Put **EmPrivacy first** if you use other plugins that inject scripts or metadata.

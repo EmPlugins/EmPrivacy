@@ -2,9 +2,9 @@
 
 # Releases and versioning
 
-Published **npm** versions of `emprivacy` follow **[Semantic Versioning 2.0.0](https://semver.org/)** (`MAJOR.MINOR.PATCH`).
+Published **npm** versions of [`@emplugins/emprivacy`](https://www.npmjs.com/package/@emplugins/emprivacy) follow **[Semantic Versioning 2.0.0](https://semver.org/)** (`MAJOR.MINOR.PATCH`).
 
-**Toolchain:** **pnpm** + **[Changesets](https://github.com/changesets/changesets)** + GitHub Actions (`release.yml`). Packages publish to the **npm registry** via `pnpm publish`.
+**Toolchain:** **pnpm** + **[Changesets](https://github.com/changesets/changesets)** + GitHub Actions (`release.yml`). Packages publish to the **[emplugins](https://www.npmjs.com/org/emplugins)** npm org via `pnpm publish`. Source: [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
 
 ## What each bump means
 
@@ -25,7 +25,7 @@ These guards keep published tarballs consistent with `package.json` and avoid sh
 - **`dist/` is not committed** — It is listed in `.gitignore`. Build artifacts are produced locally, in CI, and **immediately before publish** via `prepublishOnly`.
 - **`prepublishOnly`** — Runs `sync:version` (keeps `src/version.ts` aligned with `package.json`), `typecheck`, `build`, `test`, **`verify:exports`**, and `pnpm audit`.
 - **`kysely` override** — The dev-dependency `emdash` can resolve an older `kysely`; `pnpm.overrides` in `package.json` pins a **patched** Kysely so `pnpm audit` stays clean. See [docs/DEVELOPMENT.md](DEVELOPMENT.md).
-- **Install range** — Pin consumers with semver as needed, e.g. `emprivacy@^0.3.0`.
+- **Install range** — Pin consumers with semver as needed, e.g. `@emplugins/emprivacy@^1.0.0`.
 
 Before publishing locally (usually unnecessary once CI is configured):
 
@@ -52,7 +52,7 @@ Uses [`.cursor/skills/emdash-release/`](../.cursor/skills/emdash-release/SKILL.m
 2. Merge to `main`. GitHub Actions opens a **Version Packages** PR when changesets are pending.
 3. Merge the Version Packages PR. CI runs `pnpm release:publish` and creates a GitHub Release.
 
-Requires **`NPM_TOKEN`** secret on the repo (publish rights for `emprivacy`).
+Requires **`NPM_TOKEN`** secret on the repo (publish rights for `@emplugins/emprivacy` on the [emplugins](https://www.npmjs.com/org/emplugins) org).
 
 ### Local (fallback)
 
@@ -77,5 +77,5 @@ See [EMDASH_COMPAT.md](../EMDASH_COMPAT.md) for tested upstream versions and upg
 Pin with a range that matches your risk tolerance, for example:
 
 ```bash
-pnpm add emprivacy@^0.3.0
+pnpm add @emplugins/emprivacy@^1.0.0
 ```

@@ -30,7 +30,7 @@ export function emprivacyPlugin(): PluginDescriptor {
 		id: PLUGIN_ID,
 		version: VERSION,
 		format: "standard",
-		entrypoint: "emprivacy/sandbox",
+		entrypoint: "@emplugins/emprivacy/sandbox",
 		capabilities: ["hooks.page-fragments:register"],
 		storage: {
 			consentEvents: { indexes: ["createdAt", "policyVersion"] },
