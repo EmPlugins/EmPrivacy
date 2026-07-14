@@ -6,7 +6,7 @@
 
 ## Requirements
 
-- **EmDash** `>=0.14.0` (**tested with `0.14.0`**; re-test on your deployed minor when upgrading). Sites on EmDash 0.9–0.13: use **emprivacy 0.2.x**.
+- **EmDash** `>=0.14.0` (**tested with `0.14.0` and `0.29.0`**; see [EMDASH_COMPAT.md](./EMDASH_COMPAT.md)). Sites on EmDash 0.9–0.13: use **emprivacy 0.2.x**.
 - Plugins registered in **`astro.config`** in **trusted** mode (the `plugins: []` array).  
   **Sandboxed** marketplace plugins **cannot** use `page:fragments`; EmPrivacy needs the `hooks.page-fragments:register` capability so head/body contributions run on public pages. See [Plugin System Overview](https://docs.emdashcms.com/plugins/overview/).
 
@@ -134,7 +134,9 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 
 ## Releases
 
-npm releases follow **[Semantic Versioning](https://semver.org/)** (`MAJOR.MINOR.PATCH`). Tags are `v`-prefixed (e.g. `v0.1.0`). See [docs/RELEASES.md](docs/RELEASES.md) for bump rules, `npm version` / `npm run release:*`, and publish checklist.
+npm releases follow **[Semantic Versioning](https://semver.org/)** (`MAJOR.MINOR.PATCH`). Tags are `v`-prefixed (e.g. `v0.1.0`). See [docs/RELEASES.md](docs/RELEASES.md).
+
+**EmDash upgrades:** say `update to latest emdash release` in Cursor (skill: [`.cursor/skills/emdash-release`](.cursor/skills/emdash-release/SKILL.md)) to bump, test, and publish to npm + GitHub without a manual merge gate.
 
 ## License
 
