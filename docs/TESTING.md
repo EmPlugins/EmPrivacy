@@ -16,7 +16,7 @@ These scripts do **not** start EmDash or exercise `page:fragments`, admin routes
 
 ## Manual integration QA (required before production)
 
-Use a **staging** EmDash Astro app with `emprivacyPlugin()` in `plugins: []`, layout wires (`EmDashHead` / body components), and the same EmDash version you plan to ship.
+Use a **staging** EmDash **`0.14.0+`** Astro app with `emprivacyPlugin()` in `plugins: []`, layout wires (`EmDashHead` / body components), and the same EmDash version you plan to ship.
 
 Work through the checklist from the main [README](../README.md) (also copied below). Record pass/fail and browser + EmDash versions.
 

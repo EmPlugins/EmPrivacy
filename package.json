@@ -1,7 +1,7 @@
 {
   "//": "SPDX-License-Identifier: MIT",
   "name": "emprivacy",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Cookie consent and privacy notices for EmDash (GDPR, CCPA/CIPA-oriented configuration)",
   "type": "module",
   "main": "dist/index.mjs",
@@ -36,14 +36,16 @@
   ],
   "author": "",
   "license": "MIT",
+  "packageManager": "pnpm@9.15.4",
   "peerDependencies": {
-    "emdash": "^0.9.0"
+    "emdash": ">=0.14.0"
   },
   "dependencies": {
     "zod": "^4.3.5"
   },
   "devDependencies": {
-    "emdash": "^0.9.0",
+    "@changesets/cli": "^2.27.11",
+    "emdash": "^0.29.0",
     "tsdown": "^0.20.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
@@ -59,8 +61,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "overrides": {
-    "kysely": "0.28.16"
+  "pnpm": {
+    "overrides": {
+      "kysely": "0.29.2"
+    }
   },
   "scripts": {
     "sync:version": "node scripts/write-version.mjs",
@@ -68,14 +72,13 @@
     "build": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --clean",
     "dev": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --watch",
     "typecheck": "tsc --noEmit",
-    "audit": "npm audit",
+    "audit": "pnpm audit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run sync:version && npm run typecheck && npm run build && npm test && npm run verify:exports && npm run audit",
-    "preversion": "npm run sync:version && npm run typecheck && npm run build && npm test && npm run verify:exports && npm run audit",
-    "release:patch": "npm version patch",
-    "release:minor": "npm version minor",
-    "release:major": "npm version major"
+    "pack:check": "npm pack --dry-run",
+    "emdash:conformance": "bash scripts/emdash-conformance.sh",
+    "release:publish": "pnpm run sync:version && pnpm run typecheck && pnpm run build && pnpm test && pnpm run verify:exports && pnpm run audit && pnpm publish --access public",
+    "prepublishOnly": "pnpm run sync:version && pnpm run typecheck && pnpm run build && pnpm test && pnpm run verify:exports && pnpm run audit"
   },
   "engines": {
     "node": ">=20"

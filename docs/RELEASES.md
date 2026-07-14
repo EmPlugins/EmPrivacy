@@ -4,6 +4,8 @@
 
 Published **npm** versions of `emprivacy` follow **[Semantic Versioning 2.0.0](https://semver.org/)** (`MAJOR.MINOR.PATCH`).
 
+**Toolchain:** **pnpm** + **[Changesets](https://github.com/changesets/changesets)** + GitHub Actions (`release.yml`). Packages publish to the **npm registry** via `pnpm publish`.
+
 ## What each bump means
 
 | Level | When to use it |
@@ -16,61 +18,64 @@ Published **npm** versions of `emprivacy` follow **[Semantic Versioning 2.0.0](h
 
 **Policy / consent version** (in the EmDash admin) is separate from package semver: it only re-prompts visitors when your legal text or choices change.
 
-## Safe publishing (npm)
+## Safe publishing
 
 These guards keep published tarballs consistent with `package.json` and avoid shipping stale or missing `dist/` output.
 
-- **`dist/` is not committed** — It is listed in `.gitignore`. Build artifacts are produced locally, in CI, and **immediately before publish** via lifecycle scripts.
-- **`prepublishOnly` and `preversion`** — Run `sync:version` (keeps `src/version.ts` aligned with `package.json`), `typecheck`, `build`, `test`, and **`verify:exports`** (confirms every path in `main` / `exports` exists on disk after the build).
-- **`kysely` override** — The dev-dependency `emdash` can resolve an older `kysely`; the root `package.json` `overrides` field pins a **patched** Kysely so `npm audit` stays clean. See [docs/DEVELOPMENT.md](DEVELOPMENT.md).
-- **Install range** — Pin consumers with semver as needed, e.g. `emprivacy@^0.1.0`.
+- **`dist/` is not committed** — It is listed in `.gitignore`. Build artifacts are produced locally, in CI, and **immediately before publish** via `prepublishOnly`.
+- **`prepublishOnly`** — Runs `sync:version` (keeps `src/version.ts` aligned with `package.json`), `typecheck`, `build`, `test`, **`verify:exports`**, and `pnpm audit`.
+- **`kysely` override** — The dev-dependency `emdash` can resolve an older `kysely`; `pnpm.overrides` in `package.json` pins a **patched** Kysely so `pnpm audit` stays clean. See [docs/DEVELOPMENT.md](DEVELOPMENT.md).
+- **Install range** — Pin consumers with semver as needed, e.g. `emprivacy@^0.3.0`.
 
-Before publishing, you can inspect the tarball:
+Before publishing locally (usually unnecessary once CI is configured):
 
 ```bash
-npm run build
-npm pack --dry-run
+pnpm run build
+pnpm pack --dry-run
 ```
 
 ## Cutting a release (maintainers)
 
-1. Ensure `main` (or your release branch) is green: `npm ci`, then `npm run typecheck`, `npm run build`, `npm test`.
-2. Bump the package and create a git tag (the `preversion` script runs checks again):
+### EmDash compatibility (fully agent-driven)
 
-   ```bash
-   npm run release:patch   # 0.1.0 → 0.1.1
-   # or
-   npm run release:minor   # 0.1.0 → 0.2.0
-   # or
-   npm run release:major   # 0.1.0 → 1.0.0
-   ```
+In Cursor:
 
-   Alternatively: `npm version patch|minor|major` (same effect).
+```
+update to latest emdash release
+```
 
-3. Publish to npm (requires registry login and publish rights):
+Uses [`.cursor/skills/emdash-release/`](../.cursor/skills/emdash-release/SKILL.md) and [`.cursor/emdash-release.json`](../.cursor/emdash-release.json): conformance → compat PR → Version Packages merge → `pnpm release:publish` (npm + GitHub Release). Details: [maintainer-release.md](./maintainer-release.md).
 
-   ```bash
-   npm publish
-   ```
+### Automated feature release (Changesets)
 
-4. Push the version commit and tag:
+1. On a feature PR, run `pnpm changeset` and commit the generated file under `.changeset/`.
+2. Merge to `main`. GitHub Actions opens a **Version Packages** PR when changesets are pending.
+3. Merge the Version Packages PR. CI runs `pnpm release:publish` and creates a GitHub Release.
 
-   ```bash
-   git push --follow-tags
-   ```
+Requires **`NPM_TOKEN`** secret on the repo (publish rights for `emprivacy`).
 
-5. On GitHub ([**EmPlugins/EmPrivacy → Releases**](https://github.com/EmPlugins/EmPrivacy/releases)), open **Draft a new release**, choose the new tag (e.g. `v0.1.1`), title it `v0.1.1`, and summarize user-facing changes.
+### Local (fallback)
+
+```bash
+pnpm install
+pnpm changeset          # on feature branch
+pnpm changeset version  # on main after merge
+pnpm release:publish    # sync, build, test, verify, audit, publish
+git push --follow-tags
+```
 
 ## Tags
 
-Release tags use the **`v` prefix** (e.g. `v0.1.0`) to match `npm version` defaults and common GitHub Release practice.
+Release tags use the **`v` prefix** (e.g. `v0.3.1`) via Changesets / GitHub Releases.
+
+## EmDash compatibility
+
+See [EMDASH_COMPAT.md](../EMDASH_COMPAT.md) for tested upstream versions and upgrade playbook.
 
 ## Consumers
 
 Pin with a range that matches your risk tolerance, for example:
 
 ```bash
-npm install emprivacy@^0.1.0
+pnpm add emprivacy@^0.3.0
 ```
-
-`^0.1.0` allows newer **patch** and **minor** releases on the `0.1` line; adjust after `1.0.0` per your semver policy.

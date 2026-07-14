@@ -1,0 +1,32 @@
+{
+  "$schema": "./emdash-release.schema.json",
+  "repo": {
+    "github": "EmPlugins/EmPrivacy",
+    "baseBranch": "main"
+  },
+  "emdash": {
+    "minPeerVersion": "0.14.0",
+    "pluginPackage": "emprivacy",
+    "pluginPackageJson": "package.json"
+  },
+  "publishablePackages": ["emprivacy"],
+  "paths": {
+    "compatDoc": "EMDASH_COMPAT.md",
+    "readme": "README.md",
+    "ciWorkflow": ".github/workflows/ci.yml",
+    "releaseWorkflow": ".github/workflows/release.yml",
+    "conformanceScript": "scripts/emdash-conformance.sh",
+    "maintainerDoc": "docs/maintainer-release.md",
+    "releaseChecklist": "docs/release-checklist.md",
+    "pluginSourceDir": "src"
+  },
+  "apiTouchpoints": [
+    "src/index.ts",
+    "src/sandbox-entry.ts",
+    "src/config.ts"
+  ],
+  "approval": {
+    "autoMergeCompatPr": true,
+    "mergeVersionPackagesPr": true
+  }
+}
