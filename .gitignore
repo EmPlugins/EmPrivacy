@@ -12,6 +12,7 @@ dist/
 .DS_Store
 .env
 .env.*
+.npmrc
 .old/
 coverage/
 .vite/
