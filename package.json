@@ -79,7 +79,7 @@
     "pack:check": "npm pack --dry-run",
     "emdash:conformance": "bash scripts/emdash-conformance.sh",
     "release:version": "pnpm changeset version && pnpm run sync:version",
-    "release:publish": "pnpm run sync:version && pnpm run typecheck && pnpm run build && pnpm test && pnpm run verify:exports && pnpm run audit && pnpm publish --access public",
+    "release:publish": "pnpm run sync:version && pnpm run typecheck && pnpm run build && pnpm test && pnpm run verify:exports && pnpm run audit && node scripts/npm-auth-publish.mjs",
     "prepublishOnly": "pnpm run sync:version && pnpm run typecheck && pnpm run build && pnpm test && pnpm run verify:exports && pnpm run audit"
   },
   "engines": {

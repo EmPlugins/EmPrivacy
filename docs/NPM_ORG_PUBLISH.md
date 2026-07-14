@@ -10,11 +10,12 @@ This matches EmPost (`@emplugins/emdash-plugin-md-draft`, etc.).
 
 1. Sign in to npm as a user who is a **member of [emplugins](https://www.npmjs.com/org/emplugins)** with permission to publish (typically Owner or a role with package publish).
 2. Open [Access Tokens](https://www.npmjs.com/settings/~/tokens) → **Generate New Token**.
-3. Prefer **Automation** (CI-friendly; no interactive 2FA on publish).
-   - Or **Granular Access Token**:
-     - Organizations: **emplugins**
-     - Packages: `@emplugins/emprivacy` (or all `@emplugins/*`)
-     - Permissions: **Read and write**
+3. Create a **Granular Access Token** (Automation tokens are gone):
+   - **Packages and scopes**: **Read and write**
+   - Select **All packages** (required to *create* a new package like `@emplugins/emprivacy` the first time).  
+     Selecting only existing packages (e.g. EmPost’s) often causes a misleading npm `404` on publish.
+   - **Bypass two-factor authentication**: **checked** (required for CI with account 2FA; npm will warn — that is expected)
+   - Organizations: optional; org access alone does **not** grant publish rights
 4. Copy the token once.
 
 ### Optional: confirm locally
