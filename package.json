@@ -1,6 +1,6 @@
 {
   "//": "SPDX-License-Identifier: MIT",
-  "name": "emprivacy",
+  "name": "@emplugins/emprivacy",
   "version": "0.3.1",
   "description": "Cookie consent and privacy notices for EmDash (GDPR, CCPA/CIPA-oriented configuration)",
   "type": "module",
@@ -52,14 +52,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/EmPlugins/EmPrivacy.git"
+    "url": "https://github.com/EmPlugins/EmPrivacy.git"
   },
   "bugs": {
     "url": "https://github.com/EmPlugins/EmPrivacy/issues"
   },
   "homepage": "https://github.com/EmPlugins/EmPrivacy#readme",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "pnpm": {
     "overrides": {

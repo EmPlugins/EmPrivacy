@@ -2,6 +2,18 @@
 
 # Unreleased
 
+# @emplugins/emprivacy v1.0.0 (pending Version Packages)
+
+## Breaking
+
+- **npm package renamed** — Install and import **`@emplugins/emprivacy`** ( [emplugins](https://www.npmjs.com/org/emplugins) org ). Legacy unscoped `emprivacy` is no longer the publish target.
+- **Sandbox entrypoint** — Descriptor uses `@emplugins/emprivacy/sandbox` (update only if you referenced the old entry string directly).
+
+## Unchanged
+
+- Runtime plugin id `emprivacy`, cookie `emprivacy_cc`, and API routes.
+- Source repository: [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
+
 # emprivacy v0.3.0
 
 ## Changes

@@ -2,7 +2,7 @@
 
 # Maintainer release guide
 
-How EmPrivacy versions and publishes `emprivacy` to npm and GitHub Releases.
+How EmPrivacy versions and publishes [`@emplugins/emprivacy`](https://www.npmjs.com/package/@emplugins/emprivacy) to the [emplugins](https://www.npmjs.com/org/emplugins) npm org and GitHub Releases on [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
 
 ## Agent-driven EmDash upgrades
 
@@ -30,7 +30,7 @@ The agent discovers the latest `emdash`, bumps deps/CI/docs, runs `pnpm emdash:c
 
 | Credential | Where | Notes |
 |------------|-------|-------|
-| `NPM_TOKEN` | GitHub repo secret | Automation/granular token; publish `emprivacy`; 2FA bypass for CI |
+| `NPM_TOKEN` | GitHub repo secret | Automation/granular token with publish on **emplugins** org (`@emplugins/emprivacy`); 2FA bypass for CI |
 | `gh auth login` | Maintainer machine | PRs and agent merges |
 | Org: Actions create PRs | GitHub org/repo settings | Automatic Version Packages PRs |
 
@@ -107,12 +107,17 @@ pnpm release:publish
 ### Verify publish
 
 ```bash
-npm view emprivacy version
+npm view @emplugins/emprivacy version
 env -u GITHUB_TOKEN gh release list --limit 3
 ```
 
+## npm org credentials (emplugins)
+
+See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) for creating an Automation token on the [emplugins](https://www.npmjs.com/org/emplugins) org and setting `NPM_TOKEN` on this GitHub repo.
+
 ## Related
 
+- [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) — token + first publish checklist
 - [release-checklist.md](./release-checklist.md)
 - [RELEASES.md](./RELEASES.md) — semver policy
 - [EMDASH_COMPAT.md](../EMDASH_COMPAT.md)

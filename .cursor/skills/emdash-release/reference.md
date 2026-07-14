@@ -5,14 +5,14 @@
 - [`.cursor/emdash-release.json`](../../emdash-release.json)
 - Schema: [`.cursor/emdash-release.schema.json`](../../emdash-release.schema.json)
 
-EmPrivacy is a **single-package** repo (`emprivacy` at repo root). `approval.mergeVersionPackagesPr` is **true** so agents publish without a human gate.
+EmPrivacy is a **single-package** repo (`@emplugins/emprivacy` at repo root). Publishes to the [emplugins](https://www.npmjs.com/org/emplugins) npm org. `approval.mergeVersionPackagesPr` is **true** so agents publish without a human gate.
 
 ## Credentials
 
 | Credential | Where | Used for |
 |------------|-------|----------|
 | GitHub CLI (`gh auth login`) | Local machine | Branch, PRs, CI watch, merges |
-| `NPM_TOKEN` | GitHub repo secret on `EmPlugins/EmPrivacy` | `release.yml` → npm publish |
+| `NPM_TOKEN` | GitHub repo secret on `EmPlugins/EmPrivacy` | `release.yml` → publish `@emplugins/emprivacy` (emplugins org) |
 | `GITHUB_TOKEN` | Actions (automatic) | Version PR, changelog, GitHub Release |
 
 Always prefer:
@@ -25,7 +25,7 @@ when the shell env overrides keyring auth.
 
 ### One-time npm token
 
-1. npmjs.com → Access Tokens → Automation or granular token with publish for `emprivacy` (2FA bypass for CI).
+1. npmjs.com → Access Tokens → Automation or granular token with publish for **emplugins** / `@emplugins/emprivacy` (see `docs/NPM_ORG_PUBLISH.md`).
 2. Add as repo secret `NPM_TOKEN` on `EmPlugins/EmPrivacy`.
 
 ## Files touched on every EmDash upgrade
@@ -75,14 +75,14 @@ Runs typecheck, test, build, verify:exports, audit, pack:check at `minPeerVersio
 
 - `publish:` in `release.yml` **must** be `pnpm release:publish` (no inline `&&`)
 - Omit `version` on `pnpm/action-setup` when `packageManager` is set in `package.json`
-- Publishable package name in changesets: `emprivacy`
+- Publishable package name in changesets: `@emplugins/emprivacy`
 
 ## Troubleshooting
 
 | Symptom | Action |
 |---------|--------|
 | Missing config | Restore `.cursor/emdash-release.json` |
-| Conformance filter wrong | `emdash.pluginPackage` must be `emprivacy` |
+| Conformance filter wrong | `emdash.pluginPackage` must be `@emplugins/emprivacy` |
 | Unexpected major | Stale `.changeset/*.md` |
 | Version Packages PR missing | Create from `changeset-release/main`; fix org Actions → allow PR creation |
 | Publish failed | Check `NPM_TOKEN`, `pnpm release:publish`; see `docs/maintainer-release.md` |

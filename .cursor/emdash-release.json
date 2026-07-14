@@ -6,10 +6,10 @@
   },
   "emdash": {
     "minPeerVersion": "0.14.0",
-    "pluginPackage": "emprivacy",
+    "pluginPackage": "@emplugins/emprivacy",
     "pluginPackageJson": "package.json"
   },
-  "publishablePackages": ["emprivacy"],
+  "publishablePackages": ["@emplugins/emprivacy"],
   "paths": {
     "compatDoc": "EMDASH_COMPAT.md",
     "readme": "README.md",

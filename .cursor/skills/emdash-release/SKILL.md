@@ -28,9 +28,9 @@ Extract:
 | `repo.github` | Verify `git remote get-url origin` → `EmPlugins/EmPrivacy` |
 | `repo.baseBranch` | Default `main` |
 | `emdash.minPeerVersion` | CI matrix floor; do not lower |
-| `emdash.pluginPackage` | `emprivacy` (pnpm `--filter`) |
+| `emdash.pluginPackage` | `@emplugins/emprivacy` (pnpm `--filter`) |
 | `emdash.pluginPackageJson` | `package.json` |
-| `publishablePackages` | Changeset frontmatter (`emprivacy`) |
+| `publishablePackages` | Changeset frontmatter (`@emplugins/emprivacy`) |
 | `paths.*` | Files to edit |
 | `apiTouchpoints` | Non-conforming diagnosis |
 | `approval.autoMergeCompatPr` | Must be true for unattended compat merge |
@@ -116,7 +116,7 @@ Create `.changeset/emdash-<version>-compat.md`:
 
 ```markdown
 ---
-"emprivacy": patch
+"@emplugins/emprivacy": patch
 ---
 
 Test against EmDash <version>.
@@ -179,12 +179,12 @@ env -u GITHUB_TOKEN gh release list --limit 3
 
 Report:
 
-- New `emprivacy` version on npm
-- GitHub Release tag/URL
+- New `@emplugins/emprivacy` version on npm ([emplugins](https://www.npmjs.com/org/emplugins) org)
+- GitHub Release tag/URL on EmPlugins/EmPrivacy
 - Conforming vs non-conforming + bump type
 - Consumed changesets
 
-If publish fails, open a **minimal fix PR from `origin/main`** (typically `package.json` + `release.yml`), merge it, and re-watch Release. See `docs/maintainer-release.md`.
+If publish fails, open a **minimal fix PR from `origin/main`** (typically `package.json` + `release.yml`), merge it, and re-watch Release. See `docs/maintainer-release.md` and `docs/NPM_ORG_PUBLISH.md`.
 
 ## Hard rules
 

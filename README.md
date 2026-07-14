@@ -13,12 +13,14 @@
 ## Install
 
 ```bash
-npm install emprivacy
+npm install @emplugins/emprivacy
 ```
 
-Use a **semver range** if you want controlled upgrades, for example `emprivacy@^0.1.0`. Versioning policy and maintainer release steps: [docs/RELEASES.md](docs/RELEASES.md).
+Published under the [emplugins](https://www.npmjs.com/org/emplugins) npm org. Source: [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
 
-Or use a Git dependency / `npm link` while developing. **Source and issues:** [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
+Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^1.0.0`. Versioning policy and maintainer release steps: [docs/RELEASES.md](docs/RELEASES.md). Org publish / `NPM_TOKEN` setup: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
+
+The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@emplugins/emprivacy`.
 
 ## Quick start
 
@@ -27,7 +29,7 @@ Or use a Git dependency / `npm link` while developing. **Source and issues:** [g
    ```ts
    import { defineConfig } from "astro/config";
    import { emdash } from "emdash/astro";
-   import { emprivacyPlugin } from "emprivacy";
+   import { emprivacyPlugin } from "@emplugins/emprivacy";
 
    export default defineConfig({
      integrations: [
