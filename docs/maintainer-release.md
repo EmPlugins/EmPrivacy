@@ -51,10 +51,11 @@ env -u GITHUB_TOKEN gh pr create ...
 Config: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 
 ```yaml
-publish: pnpm release:publish   # do NOT use inline && in changesets/action
+version: pnpm release:version   # do NOT use inline && in changesets/action
+publish: pnpm release:publish
 ```
 
-`changesets/action` misparses inline shell chains. Always use the `release:publish` script.
+`changesets/action` misparses inline shell chains. Always use the `release:version` / `release:publish` scripts.
 
 ### CI pnpm setup
 
