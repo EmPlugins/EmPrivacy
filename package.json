@@ -1,7 +1,7 @@
 {
   "//": "SPDX-License-Identifier: MIT",
   "name": "@emplugins/emprivacy",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Cookie consent, gated embeds, and privacy notices for EmDash (GDPR, CCPA/CIPA-oriented configuration)",
   "type": "module",
   "main": "dist/index.mjs",
