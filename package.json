@@ -40,7 +40,7 @@
     "emdash": "^0.38.0"
   },
   "dependencies": {
-    "zod": "^4.3.5"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.11",
@@ -63,7 +63,8 @@
   },
   "pnpm": {
     "overrides": {
-      "kysely": "0.29.6"
+      "kysely": "0.29.6",
+      "zod": "4.5.4"
     }
   },
   "scripts": {

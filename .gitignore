@@ -7,6 +7,7 @@ MAINTAINER_RELEASE.md
 docs/SECURITY_REVIEW_PROMPT.md
 
 node_modules/
+.pnpm-store/
 dist/
 *.tgz
 .DS_Store
