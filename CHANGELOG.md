@@ -1,11 +1,12 @@
 # emprivacy
 
-## Unreleased
+## 2.1.0
 
 ### Minor Changes
 
-- **Publisher consent features** — Functional category in `emprivacy_cc` (`{ v, f, a, m }`; older cookies without `f` re-prompt); `window.emprivacy` API (`get` / `has` / `onChange` / `open`) plus `emprivacy:change`; gated official EmDash embed placeholders (`@emplugins/emprivacy/astro`); banner i18n + hex theme tokens; analytics presets (Plausible, Fathom, Umami, Simple Analytics, GA4, GTM) and generated vendor list (admin + public `/vendors`); admin shows installed vs latest npm version.
-- **Security model** — Client re-validates embed `data-src` and script URLs before inject; tighter YouTube/Vimeo iframe `sandbox`; **GTM loads only after Marketing consent**; optional script host allowlist and SRI on Custom/Marketing/Umami URLs; configurable consent cookie TTL (default 180 days); embed “Allow … and load” opens preferences instead of silently granting; `/record` requires matching `Origin` or `Sec-Fetch-Site: same-origin`, fails closed when storage capacity cannot be checked, and rate-limits anonymous writes. CSP guidance documented for inline bootstrap + preset hosts.
+- 076fc57: Show the installed EmPrivacy version and the latest npm release on the admin settings page.
+- 076fc57: Add a public consent API, functional category, gated EmDash embeds, banner i18n and theme tokens, analytics presets, and a generated vendor list.
+- 076fc57: Harden client embed/script injection, move GTM to Marketing, tighten /record CSRF and rate limits, and add host allowlist, SRI, and cookie TTL controls.
 
 ## 2.0.0
 
