@@ -1,5 +1,11 @@
 # emprivacy
 
+## 2.0.0
+
+### Major Changes
+
+- ec6b3e5: Update to latest EmDash 0.38
+
 ## 1.0.0
 
 ### Major Changes
