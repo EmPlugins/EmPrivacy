@@ -6,19 +6,21 @@
 
 ## Requirements
 
-- **EmDash** `>=0.14.0` (**tested with `0.14.0` and `0.29.0`**; see [EMDASH_COMPAT.md](./EMDASH_COMPAT.md)). Sites on EmDash 0.9–0.13: use **emprivacy 0.2.x**.
-- Plugins registered in **`astro.config`** in **trusted** mode (the `plugins: []` array).  
-  **Sandboxed** marketplace plugins **cannot** use `page:fragments`; EmPrivacy needs the `hooks.page-fragments:register` capability so head/body contributions run on public pages. See [Plugin System Overview](https://docs.emdashcms.com/plugins/overview/).
+- **EmDash** `^0.38.0` (**tested with `0.38.0`**; re-test on your deployed minor when upgrading).
+- **Node.js** `>= 22.16` (matches EmDash’s engine requirement).
+- Register as a **native** plugin in **`astro.config`** via `plugins: []` (not `sandboxed: []`). EmPrivacy uses `page:fragments` for the public banner and scripts; that hook only runs for trusted in-process plugins. See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/) and [Plugin overview](https://docs.emdashcms.com/plugins/overview/).
 
 ## Install
 
 ```bash
+pnpm add @emplugins/emprivacy
+# or
 npm install @emplugins/emprivacy
 ```
 
-Published under the [emplugins](https://www.npmjs.com/org/emplugins) npm org. Source: [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
+Published under the [emplugins](https://www.npmjs.com/org/emplugins) npm org. Source: [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy). See [EMDASH_COMPAT.md](./EMDASH_COMPAT.md) for EmDash version mapping.
 
-Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^1.0.0`. Versioning policy and maintainer release steps: [docs/RELEASES.md](docs/RELEASES.md). Org publish / `NPM_TOKEN` setup: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
+Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^1.0.0`. Versioning: [docs/RELEASES.md](docs/RELEASES.md). Org publish: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
 
 The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@emplugins/emprivacy`.
 
@@ -28,7 +30,7 @@ The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@empl
 
    ```ts
    import { defineConfig } from "astro/config";
-   import { emdash } from "emdash/astro";
+   import emdash from "emdash/astro";
    import { emprivacyPlugin } from "@emplugins/emprivacy";
 
    export default defineConfig({
@@ -40,7 +42,9 @@ The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@empl
    });
    ```
 
-2. **Use EmDash page integration** in your layout so fragments render: include `<EmDashHead />`, `<EmDashBodyStart />`, `<EmDashBodyEnd />` (or your theme’s equivalents). See [EmDash docs](https://docs.emdashcms.com/).
+   Native descriptors belong in `plugins`, not `sandboxed`. EmDash loads the named `createPlugin()` export from the package at runtime.
+
+2. **Use EmDash page integration** in your layout so fragments render: include `<EmDashHead />`, `<EmDashBodyStart />`, `<EmDashBodyEnd />` (or your theme’s equivalents), typically with a shared `createPublicPageContext({ Astro, … })`. See [EmDash page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/).
 
 3. **Configure EmPrivacy in the admin** (shield → **EmPrivacy**):
    - **Privacy policy** — Point to your existing EmDash **Page** using its **public path** (what you see in the address bar when that Page is open, e.g. `/privacy`), **or** a full `https://…` URL if the policy is hosted elsewhere. Root-relative paths are resolved with EmDash `ctx.url()` so links stay correct across environments.
@@ -64,6 +68,14 @@ Visitors see a banner on first visit (or when you bump **Policy / consent versio
 | Optional server log | POST consent snapshots to `/_emdash/api/plugins/emprivacy/record` + optional storage rows (no IP in v1) |
 | Google Consent Mode v2 | Optional denied defaults in `<head>` + `gtag('consent','update',…)` — validate with [Google’s docs](https://support.google.com/tagmanager/answer/13695607) |
 
+## Capabilities
+
+| Capability | Why |
+|------------|-----|
+| `hooks.page-fragments:register` | Public banner, styles, and consent bootstrap scripts |
+
+Settings, KV, and declared plugin storage need no extra capability. Native plugins are not an isolation boundary: review and install this package like first-party site code.
+
 ## Legal disclaimer
 
 EmPrivacy helps you implement **technical** consent UX and script loading patterns used for regulations such as **GDPR** and **CCPA/CIPA**. **You** remain responsible for:
@@ -81,16 +93,16 @@ Put **`emprivacyPlugin()` early** in the `plugins` array so `page:metadata` / `p
 ## Development
 
 ```bash
-npm install
-npm run typecheck   # TypeScript
-npm run build       # ESM + types in dist/
-npm test            # Unit tests (see Testing)
-npm run test:watch  # Vitest in watch mode (optional)
+pnpm install
+pnpm run typecheck   # TypeScript
+pnpm run build       # ESM + types in dist/
+pnpm test            # Unit tests (see Testing)
+pnpm run test:watch  # Vitest in watch mode (optional)
 ```
 
-Outputs ESM under `dist/` with typings, matching the [plugin layout](https://www.npmjs.com/package/@emdash-cms/plugin-audit-log) used by other EmDash packages.
+Outputs ESM under `dist/` with typings. Layout follows EmDash’s [native plugin packaging](https://docs.emdashcms.com/plugins/creating-native-plugins/distributing/) (`emprivacyPlugin()` descriptor + named `createPlugin()`).
 
-Dependency, audit, and deprecation context (Kysely override, `npm audit`): [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Dependency, audit, and deprecation context: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Testing
 
@@ -132,13 +144,11 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 - [ ] Admin save updates the public banner
 - [ ] Optional: server logging + recent records in admin
 - [ ] Optional: Google Consent Mode (Tag Assistant / [Google](https://support.google.com/tagmanager/answer/13695607))
-- [ ] **Trusted** `plugins: []` (see [Requirements](#requirements))
+- [ ] Native `plugins: []` registration (see [Requirements](#requirements))
 
 ## Releases
 
-npm releases follow **[Semantic Versioning](https://semver.org/)** (`MAJOR.MINOR.PATCH`). Tags are `v`-prefixed (e.g. `v0.1.0`). See [docs/RELEASES.md](docs/RELEASES.md).
-
-**EmDash upgrades:** say `update to latest emdash release` in Cursor (skill: [`.cursor/skills/emdash-release`](.cursor/skills/emdash-release/SKILL.md)) to bump, test, and publish to npm + GitHub without a manual merge gate.
+npm releases follow **[Semantic Versioning](https://semver.org/)** (`MAJOR.MINOR.PATCH`). Tags are `v`-prefixed (e.g. `v0.2.1`). See [docs/RELEASES.md](docs/RELEASES.md) for bump rules, `npm version` / `npm run release:*`, and publish checklist.
 
 ## License
 

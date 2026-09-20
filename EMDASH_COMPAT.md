@@ -1,9 +1,10 @@
 # EmDash compatibility — EmPrivacy
 
-| emprivacy version | Min EmDash (peer) | CI-tested EmDash | Notes |
-|-------------------|-------------------|------------------|-------|
-| **0.3.x** (current) | `>=0.14.0` | `0.14.0`, `0.29.0` | SandboxedPlugin export; trusted `plugins: []` registration required |
-| **0.2.x** | EmDash 0.9–0.13 | — | Use for sites not yet on 0.14+ |
+| @emplugins/emprivacy | Min EmDash (peer) | CI-tested EmDash | Notes |
+|----------------------|-------------------|------------------|-------|
+| **1.x** (current) | `^0.38.0` | `0.38.0` | Native plugin (`createPlugin`); register in `plugins: []` for `page:fragments` |
+| **0.3.x** | `>=0.14.0` | `0.14.0`, `0.29.0` | Standard/sandbox entry; trusted `plugins: []` |
+| **0.2.x** | EmDash 0.9–0.13 | — | Unscoped `emprivacy`; sites not yet on 0.14+ |
 | **0.1.x** | `^0.5.0` / `0.7.0` verified | — | Initial releases |
 
 ## When EmDash releases
@@ -13,7 +14,7 @@
 Manual / Renovate path:
 
 1. Bump the `emdash` dev dependency (or let Renovate open a PR).
-2. CI matrix runs against **minimum supported** and **latest** EmDash versions.
+2. CI matrix runs against the supported EmDash version(s).
 3. If green: ship a patch release via Changesets (“verify emdash@X.Y.Z compatibility”).
 4. If red: fix breaking API changes, raise `peerDependencies.emdash` if needed, and ship a minor/major plugin release.
 
@@ -27,6 +28,6 @@ pnpm add @emplugins/emprivacy
 npm install @emplugins/emprivacy
 ```
 
-Peer dependency: **`emdash >=0.14.0`** on your EmDash site.
+Peer dependency: **`emdash ^0.38.0`** on your EmDash site.
 
 Upstream: [emdash-cms/emdash](https://github.com/emdash-cms/emdash)

@@ -8,15 +8,15 @@ Testing is split into **automated** checks (CI-friendly) and **manual** checks t
 
 | Command | What it verifies |
 |--------|-------------------|
-| `npm run typecheck` | TypeScript types against `emdash` APIs |
-| `npm run build` | Bundles ESM + declarations (`dist/`) |
-| `npm test` | Unit tests for **pure** helpers in `src/config.ts` (validation, normalization, URL list parsing, JSON escaping) |
+| `pnpm run typecheck` | TypeScript types against `emdash` APIs |
+| `pnpm run build` | Bundles ESM + declarations (`dist/`) |
+| `pnpm test` | Unit tests for **pure** helpers in `src/config.ts` (validation, normalization, URL list parsing, JSON escaping) |
 
 These scripts do **not** start EmDash or exercise `page:fragments`, admin routes, or the consent cookie in a browser. They catch regressions in config/save validation and packaging early.
 
 ## Manual integration QA (required before production)
 
-Use a **staging** EmDash **`0.14.0+`** Astro app with `emprivacyPlugin()` in `plugins: []`, layout wires (`EmDashHead` / body components), and the same EmDash version you plan to ship.
+Use a **staging** EmDash Astro app on **`emdash@^0.38.0`** with `emprivacyPlugin()` in **`plugins: []`** (native, not `sandboxed`), layout wires (`EmDashHead` / body components with page context), and the same EmDash version you plan to ship.
 
 Work through the checklist from the main [README](../README.md) (also copied below). Record pass/fail and browser + EmDash versions.
 
@@ -38,15 +38,15 @@ Work through the checklist from the main [README](../README.md) (also copied bel
 ## CI suggestion
 
 ```bash
-npm ci
-npm run typecheck
-npm run build
-npm test
+pnpm install --frozen-lockfile
+pnpm run typecheck
+pnpm run build
+pnpm test
 ```
 
 ## Future improvements (not in v1)
 
-- **Integration tests** against EmDash’s `adaptSandboxEntry` + mock `PluginContext` (heavy; depends on EmDash test utilities if exposed).
+- **Integration tests** against EmDash’s native plugin loader + mock `PluginContext` (heavy; depends on EmDash test utilities if exposed).
 - **E2E** (Playwright) against a minimal EmDash fixture app in CI (slower, higher maintenance).
 
 For most teams, **automated unit tests + staging manual QA** is the right balance.
