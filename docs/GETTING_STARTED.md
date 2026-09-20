@@ -2,20 +2,28 @@
 
 # Getting started with EmPrivacy
 
-This guide is for site builders who want cookie consent working on an **EmDash** site without reading plugin source.
+This guide is for **EmDash site managers** who want cookie consent on a live site without reading plugin source.
 
 ## What you get
 
-- A **banner** on first visit (or after you change **Policy / consent version**).
-- Toggles for **Analytics** and **Marketing** (essential/theme cookies are not blocked by this plugin—see the main README).
-- **Privacy and cookie policy links** you control: usually an EmDash **Page** via a short **path** (e.g. `/privacy`) or a full `https://` link. Paths are turned into full URLs using EmDash’s URL helper so they work in dev and production.
-- **Analytics** — choose a **platform** in admin (e.g. **Cloudflare Web Analytics** and your **site token**, or **Custom** with one `https://` script URL per line, or **None**). **Marketing** — `https` script URLs, one per line. Scripts load **after** consent for that category.
+- A **banner** on first visit (or after you change **Policy / consent version**, or after an upgrade that adds the functional category).
+- Toggles for **Functional**, **Analytics**, and **Marketing**. Essential cookies stay on.
+- **Privacy and cookie policy links** you control (EmDash Page path or `https://`).
+- Analytics presets (Cloudflare, Plausible, Fathom, Umami, Simple Analytics, GA4, GTM under Marketing) plus Custom / None.
+- Optional **gated embeds** for official EmDash YouTube / Vimeo / social / Gist blocks.
+- A **vendor list** generated from your settings.
+
+## What you still do yourself
+
+- Write and publish the privacy policy (and cookie policy if you use one).
+- Keep third-party scripts **out of the theme** unless they go through EmPrivacy or `window.emprivacy.has(...)`.
+- Decide whether embeds are **Marketing** (default, typical for YouTube) or **Functional**.
 
 ## Before you begin
 
-1. An EmDash site on **`emdash@^0.38.0`** with the EmDash Astro integration in `astro.config` ([plugins overview](https://docs.emdashcms.com/plugins/overview/)).
+1. An EmDash site on **`emdash@^0.38.0`** with the EmDash Astro integration in `astro.config`.
 2. Ability to edit **`astro.config`** and redeploy (or run locally).
-3. Plan to register EmPrivacy as a **native** plugin (`plugins: []`, not `sandboxed: []`) because it injects public page fragments.
+3. Register EmPrivacy as a **native** plugin (`plugins: []`, not `sandboxed: []`).
 
 ---
 
@@ -27,98 +35,95 @@ pnpm add @emplugins/emprivacy
 npm install @emplugins/emprivacy
 ```
 
-The package is versioned with **semver** on npm; to pin a line, use a range such as `@emplugins/emprivacy@^1.0.0`. See [RELEASES.md](./RELEASES.md) for how releases are numbered.
+Pin a line with a range such as `@emplugins/emprivacy@^1.0.0`. See [RELEASES.md](./RELEASES.md).
 
 ---
 
 ## Step 2 — Add the plugin to Astro
 
-Open `astro.config.mjs` (or `.ts`).
+```ts
+import emdash from "emdash/astro";
+import { emprivacyPlugin } from "@emplugins/emprivacy";
 
-1. Import the plugin and EmDash integration:
+export default defineConfig({
+  integrations: [
+    emdash({
+      plugins: [
+        emprivacyPlugin(),
+        // ...other native plugins
+      ],
+    }),
+  ],
+});
+```
 
-   ```ts
-   import emdash from "emdash/astro";
-   import { emprivacyPlugin } from "@emplugins/emprivacy";
-   ```
+Do **not** put it in `sandboxed: []`.
 
-2. Add **`emprivacyPlugin()`** to **`emdash({ plugins: [...] })`**. Put **EmPrivacy first** if you use other plugins that inject scripts or metadata. Do **not** put it in `sandboxed: []`.
+### Registration order
 
-   ```ts
-   emdash({
-     plugins: [
-       emprivacyPlugin(),
-       // ...other plugins
-     ],
-   }),
-   ```
-
-3. Save and restart the dev server (or rebuild).
+| Goal | Where to put `emprivacyPlugin()` |
+|------|----------------------------------|
+| Google Consent Mode before other head tags | **First** in `plugins` |
+| Automatic placeholders for `@emdash-cms/plugin-embeds` | **After** the embeds plugin (last wins) |
+| Both | First in `plugins`, and pass `@emplugins/emprivacy/astro` `blockComponents` into `<PortableText />` (site components always win) |
 
 ---
 
 ## Step 3 — Layout must include EmDash hooks
 
-Your base layout must include EmDash’s head/body injection points (e.g. `<EmDashHead page={page} />`, `<EmDashBodyStart page={page} />`, `<EmDashBodyEnd page={page} />`, usually with `createPublicPageContext` from `emdash/page`). Otherwise the banner may not render. See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/).
+Your base layout must include `<EmDashHead page={page} />`, `<EmDashBodyStart page={page} />`, and `<EmDashBodyEnd page={page} />`, usually with `createPublicPageContext` from `emdash/page`. Otherwise the banner will not render.
 
 ---
 
-## Step 4 — Create or pick your Privacy Policy Page (EmDash)
+## Step 4 — Create the legal Pages
 
-If you already have a **Page** for your privacy policy:
+1. Create and **publish** a Page for your privacy policy. Open it on the public site and copy the path (`/privacy`).
+2. Optional: a cookie policy Page (`/cookies`).
+3. In EmPrivacy settings, paste those paths (or full `https://` URLs).
 
-1. Open that Page on the **public site** (or preview) and look at the **path** in the address bar — for example `https://yoursite.com/privacy` → use **`/privacy`**.  
-2. In **EmPrivacy** settings, paste that path into **Privacy policy — EmDash Page path or https URL** (or paste a full `https://…` URL if the policy is not an EmDash Page).
-
-If you still need a Page: create and publish a Page in EmDash, note its URL path, then enter that path in EmPrivacy as above.
-
-Same idea for an optional **Cookie policy** field: path (e.g. `/cookies`) or `https://…`.
-
-**Not accepted:** bare domains (`example.com`), `http://…` URLs, or protocol-relative links (`//…`). Use **`/your-path`** or **`https://…`**.
+**Not accepted:** `http://`, bare hostnames, or `//example.com/...`.
 
 ---
 
-## Step 5 — Configure EmPrivacy in the admin
+## Step 5 — Configure in the admin
 
-1. Log into the **site admin**.
-2. Open **EmPrivacy** (shield icon).
-3. Set:
-   - **Privacy policy** — path or `https` (see Step 4).
-   - **Cookie policy** — optional; same rules.
-   - **Banner title** and **Short notice**.
-   - **Policy / consent version** — bump when you change legal text so visitors see the banner again.
-   - **Analytics platform** — *Cloudflare Web Analytics* (default), *None*, or *Custom* (see below).
-   - **Cloudflare** — In the [Cloudflare dashboard](https://dash.cloudflare.com/) → **Web Analytics**, copy the **site token** for your property and paste it into **Cloudflare Web Analytics site token**. EmPrivacy injects the standard `beacon.min.js` script with `data-cf-beacon='{"token":"…"}'` after the visitor consents to analytics.
-   - **Custom analytics** — If you pick **Custom**, one **`https://`** script URL per line, `src` only (not a full `<script>` block); see [Custom script URLs (not HTML)](#custom-script-urls-not-html) below.
-   - **Marketing script URLs** — one **`https://`** URL per line, or leave blank.
-4. Optional: **Strict defaults**, **Google Consent Mode v2**, **Log consent to server** (see main README).
-5. **Save settings**.
+1. Log into **site admin** → shield → **EmPrivacy**.
+2. Set banner title / short notice, policy paths, and **Policy / consent version**.
+3. Choose an **Analytics platform** and fill the matching ID or token. Leave it on **None** if you do not use analytics.
+4. Optional: marketing script URLs (one `https://` `src` per line — never a `<script>` tag).
+5. Optional: gate embeds; pick Functional vs Marketing.
+6. Optional: hex theme colors, locale JSON overrides, Google Consent Mode, server log.
+7. **Save settings**.
 
-**Custom script URLs (not HTML)** (only when **Analytics** is set to **Custom**)
-
-Each line must be a **full https URL** to a `.js` file (the script `src`). **Do not** paste HTML comments, tags, or attributes. EmPrivacy injects with `<script src="…">` only (no `data-*` for custom mode).
+The **What this site uses** table on the same page is generated from the saved config. You can copy it into the cookie policy. Tokens are never listed.
 
 ---
 
 ## Step 6 — Verify on the public site
 
-1. Use a **private/incognito** window (or clear site cookies).
-2. Confirm the **banner** appears. After you save a choice, a small **cookie button** stays in the bottom-left; click it to **change** analytics/marketing choices (the page reloads when you save from that panel so consent stays in sync with loaded scripts).
-3. Click **Privacy policy** (and **Cookie policy** if set): they should open the EmDash Page or external URL you configured.
-4. In **Developer tools → Network**: before accepting, listed third-party scripts should not load; after consent, they should load only for the categories you allowed.
-5. Reload: the banner should stay dismissed if the cookie matches your **Policy / consent version**.
+1. Incognito window (or clear `emprivacy_cc`).
+2. Banner appears. **Reject non-essential**: no analytics/marketing scripts in Network; embed placeholders stay placeholders.
+3. **Accept all** (or Customize): scripts for allowed categories load; YouTube/Vimeo iframes use allowlisted player hosts after consent.
+4. Privacy / cookie links open the correct Page.
+5. Cookie button (bottom-left) reopens the panel. Saving reloads.
+6. Optional: `window.emprivacy.get()` in the console returns the current state.
 
 ---
 
-## Step 7 — Testing before go-live
+## Using the public API in a theme
 
-Run automated checks if you develop the plugin or CI:
-
-```bash
-pnpm run typecheck && pnpm run build && pnpm test
+```js
+if (window.emprivacy?.has("analytics")) {
+  // load a first-party or plugin script you own
+}
+window.emprivacy?.onChange((state) => {
+  if (state.marketing) {
+    // …
+  }
+});
 ```
 
-For a full staging checklist (banner, strict mode, admin, optional logging, Google), see **[TESTING.md](./TESTING.md)**.
+Do not read `emprivacy_cc` yourself. The JSON shape can change with a major release.
 
 ---
 
@@ -126,19 +131,18 @@ For a full staging checklist (banner, strict mode, admin, optional logging, Goog
 
 | Problem | What to check |
 |--------|----------------|
-| Nothing appears | EmDash layout missing head/body components (with `page` context); plugin not in **`plugins: []`** (native — not `sandboxed: []`); dev server restarted after config change |
-| Scripts load before consent | No hard-coded third-party scripts in the theme; EmPrivacy listed **before** those plugins in `plugins` |
-| EmPrivacy missing in admin | Plugin not installed or `astro.config` wrong; check build errors; confirm `format: "native"` / `createPlugin` package version |
-| Save fails on privacy/cookie | Value must be a **root-relative path** (`/something`) or **`https://…`** (not `http://` or a bare hostname) |
-| Save fails: “Invalid … script URL” | For **Custom** analytics or **Marketing** URLs, enter one **https URL** per line (the script `src`), not a `<script>` tag. See [Custom script URLs (not HTML)](#custom-script-urls-not-html) |
-| Privacy link 404 or wrong page | Path must match the live EmDash route (compare with the address bar when viewing that Page) |
-| Link works on staging but path looks wrong | Paths are resolved with EmDash `ctx.url()`; ensure the Page is published and the path matches production routing |
+| Nothing appears | Layout missing head/body components; plugin not in `plugins: []`; server not restarted |
+| Scripts load before consent | Theme still contains tracker snippets; another plugin is listed **before** EmPrivacy and injects tags immediately |
+| YouTube still loads immediately | Embeds plugin is registered **after** EmPrivacy, so its renderers win. Move EmPrivacy last or pass `blockComponents` on `PortableText`. |
+| Embeds stay blocked after accept | Category is Marketing but you only enabled Functional (or the reverse). |
+| Save fails on policy URL | Must be `/path` or `https://…` |
+| Save fails on analytics ID | Plausible wants `example.com` (no scheme). GA4 wants `G-…`. GTM wants `GTM-…`. Umami needs an https script URL. |
+| Privacy link 404 | Path must match the live Page route |
 
 ---
 
 ## More reading
 
-- Main **[README](../README.md)** — disclaimer, features table, registration order, full testing section  
-- **[TESTING.md](./TESTING.md)** — pre-deploy QA and CI  
-- **[PLUGIN_SETTINGS.md](./PLUGIN_SETTINGS.md)** — what each admin setting does (with examples)
-- **[CONTRIBUTING.md](../CONTRIBUTING.md)** — how to contribute
+- Main **[README](../README.md)** — does / does not, disclaimer, API
+- **[PLUGIN_SETTINGS.md](./PLUGIN_SETTINGS.md)** — every admin field
+- **[TESTING.md](./TESTING.md)** — staging QA

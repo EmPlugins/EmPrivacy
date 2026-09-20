@@ -8,9 +8,16 @@ import { VERSION } from "./version.js";
 
 export type {
 	AnalyticsProvider,
-	EmprivacyConfig,
 	ConsentRecordPayload,
+	ConsentState,
+	EmbedCategory,
+	EmprivacyConfig,
+	EmprivacyPublicRuntimeConfig,
+	VendorPublicRow,
 } from "./config.js";
+export type { EmprivacyBrowserApi, EmprivacyCategory } from "./public-api.js";
+export type { ResolvedEmbed } from "./embed-resolve.js";
+export type { AnalyticsLoader, VendorRow } from "./vendors.js";
 export { assertValidCloudflareToken } from "./config.js";
 export {
 	KV_KEY,
@@ -20,7 +27,10 @@ export {
 	isRootRelativeSitePath,
 	resolvePolicyHref,
 	isValidPolicyHrefInput,
+	isPolicyPagePath,
 } from "./config.js";
+export { resolveEmbed, EMBED_BLOCK_TYPES } from "./embed-resolve.js";
+export { buildVendorList, buildAnalyticsLoader } from "./vendors.js";
 
 export { createPlugin };
 export default createPlugin;
@@ -28,9 +38,9 @@ export default createPlugin;
 /**
  * EmDash native plugin descriptor — add to `plugins: []` in `emdash({ ... })` inside `astro.config`.
  *
- * EmPrivacy uses `page:fragments` (banner + consent scripts), which only runs for **native**
- * plugins registered in `plugins: []`. Do not place this descriptor in `sandboxed: []`.
- * See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/).
+ * EmPrivacy uses `page:fragments` (banner + consent scripts) and optional Portable Text
+ * embed placeholders, which only run for **native** plugins in `plugins: []`.
+ * Do not place this descriptor in `sandboxed: []`.
  */
 export function emprivacyPlugin(): PluginDescriptor {
 	return {
@@ -38,6 +48,7 @@ export function emprivacyPlugin(): PluginDescriptor {
 		version: VERSION,
 		format: "native",
 		entrypoint: "@emplugins/emprivacy",
+		componentsEntry: "@emplugins/emprivacy/astro",
 		adminPages: [
 			{
 				path: "/settings",

@@ -2,63 +2,57 @@
 
 # EmPrivacy — Plugin settings reference
 
-This page documents every field on the **EmPrivacy** admin settings page (shield icon → **EmPrivacy**).
+Every field on **EmPrivacy** (shield → **EmPrivacy**) in the EmDash admin.
 
-It’s written for site owners and maintainers who want to understand:
-
-- What each setting **does**
-- What input format is expected (with **examples**)
-- What public-site behavior changes when you change it
-
-> Note: EmPrivacy is a technical implementation tool, not legal advice. You are responsible for configuring categories and scripts consistently with your privacy/cookie policies and applicable laws.
+EmPrivacy is a technical consent tool, not legal advice. You are responsible for matching categories and vendors to your privacy/cookie policies.
 
 ---
 
-## Banner settings
+## Plugin version
 
-### Banner title
+- **Installed version**: the release running on this site
+- **Latest on npm**: current [`@emplugins/emprivacy`](https://www.npmjs.com/package/@emplugins/emprivacy)
 
-- **What it is**: The heading shown at the top of the cookie banner and the reopen panel.
-- **Example**: `Cookies & privacy`
-- **Behavior**: Updates visible banner UI copy only (no effect on consent logic).
-
-### Short notice
-
-- **What it is**: The banner message text shown under the title.
-- **Example**: `We use cookies to run this site and optionally for analytics and marketing. You can accept or customize your choices.`
-- **Behavior**: Updates visible banner UI copy only (no effect on consent logic).
+The rest of the page still loads if npm cannot be reached.
 
 ---
 
-## Policy links (shown in the banner)
+## Banner copy and language
 
-These links are rendered as “Privacy policy” (and optionally “Cookie policy”) in the banner and reopen panel.
+### Banner title / Short notice (fallback locale)
+
+Visible heading and body. Applied with `textContent` only (no HTML). Max 120 / 600 characters.
+
+### Fallback locale code
+
+Used when the page has no locale or no built-in chrome pack. Example: `en`. Button labels ship for `en`, `de`, `fr`, `es`, `it`, `nl`, `pt`, `pl` (including `pt-BR` → `pt`).
+
+### Optional title/message translations (JSON)
+
+```json
+{
+  "de": {
+    "bannerTitle": "Cookies & Datenschutz",
+    "bannerMessage": "Wir verwenden Cookies, um die Website zu betreiben."
+  }
+}
+```
+
+Keys must look like `en` or `pt-BR`. At most 32 locales. Invalid JSON is rejected on save.
+
+---
+
+## Policy links
 
 ### Privacy policy — EmDash Page path or https URL
 
-- **What it is**: Where your privacy policy lives.
-- **Allowed inputs**:
-  - A **root-relative path** to an EmDash Page (resolved to a full URL by EmDash at runtime), for example:
-    - `/privacy`
-  - A full **`https://…`** URL, for example:
-    - `https://example.com/privacy`
-- **Not accepted**:
-  - `http://…`
-  - `example.com/privacy` (missing scheme)
-  - `//example.com/privacy` (protocol-relative)
-  - paths without a leading slash like `privacy`
-- **Behavior**:
-  - Controls where the “Privacy policy” link in the banner opens.
-  - Does not change consent cookie format or script loading.
+Required. `/privacy` or `https://example.com/privacy`. Not `http://`, not `example.com/privacy`, not `//…`.
 
-### Cookie policy (optional) — path or https URL
+### Cookie policy (optional)
 
-- **What it is**: Optional link to a separate cookie policy.
-- **Allowed inputs**: same rules as the privacy policy field.
-- **Example**: `/cookies` or `https://example.com/cookies`
-- **Behavior**:
-  - When set, the banner shows an additional “Cookie policy” link.
-  - When blank, no cookie-policy link is shown.
+Same rules. Blank = no extra link.
+
+Paths are resolved with EmDash `ctx.url()` so they stay correct across environments.
 
 ---
 
@@ -66,116 +60,126 @@ These links are rendered as “Privacy policy” (and optionally “Cookie polic
 
 ### Policy / consent version
 
-- **What it is**: A version string stored into the consent cookie. When you change it, existing visitors are prompted again.
-- **Example values**:
-  - `1`
-  - `2026-04-25`
-  - `v3`
-- **Behavior**:
-  - EmPrivacy stores consent as a cookie like `{ v, a, m }` where `v` is your policy version and `a/m` represent analytics/marketing choices.
-  - If a visitor has an older cookie version (or no cookie), the banner will show again.
-  - Use this when you materially change your privacy/cookie policy text, tracking vendors, or categories.
+Stored in the cookie as `v`. Change it when legal text or vendors change so returning visitors are asked again.
+
+The cookie is JSON `{ v, f, a, m }`. Cookies from older EmPrivacy releases that omit `f` are treated as missing, so the banner shows once after you upgrade.
 
 ---
 
 ## Defaults and consent UX
 
-### Strict defaults (require opt-in for analytics & marketing)
+### Strict defaults
 
-- **What it is**: Controls whether the default state of the banner toggles is **off** (opt-in) or **on** (opt-out).
-- **Example**:
-  - Enabled: analytics + marketing start **off**
-  - Disabled: analytics + marketing start **on**
-- **Behavior**:
-  - **Enabled**: The initial banner loads with analytics and marketing toggles **unchecked** by default.
-  - **Disabled**: The initial banner loads with analytics and marketing toggles **checked** by default.
-  - This only affects the initial default state before the visitor makes a choice; once a cookie is set, the stored choice is used.
+On: Functional, Analytics, and Marketing start **unchecked**. Off: they start **checked** (opt-out style). Stored choices always win after the first save.
+
+### Hide the first-visit banner on privacy and cookie policy pages
+
+On (default): visitors who open `/privacy` from the banner can read it without another overlay. The cookie button still appears so they can change choices.
 
 ---
 
-## Analytics settings
+## Analytics platform
 
-Analytics scripts only load after the visitor consents to **Analytics** (unless you hard-code scripts elsewhere in your site/theme, which you should avoid).
+Scripts for **Analytics** presets load only after **Analytics** consent — except **Google Tag Manager**, which loads only after **Marketing** consent (containers commonly fire ads and remarketing).
 
-### Analytics platform
+| Value | What you enter | What loads |
+|-------|----------------|------------|
+| Cloudflare Web Analytics | Site token | `beacon.min.js` + `data-cf-beacon` |
+| Plausible | Hostname `example.com` (no `https://`) | `https://plausible.io/js/script.js` with `data-domain` |
+| Fathom | Site ID (letters/digits) | `https://cdn.usefathom.com/script.js` with `data-site` |
+| Umami | Website ID **and** https script URL | Your tracker URL with `data-website-id` |
+| Simple Analytics | Optional hostname | `https://scripts.simpleanalyticscdn.com/latest.js` |
+| Google Analytics 4 | `G-…` measurement ID | `https://www.googletagmanager.com/gtag/js?id=…` then `gtag('config', …)` |
+| Google Tag Manager | `GTM-…` | `https://www.googletagmanager.com/gtm.js?id=…` after **Marketing** consent. Tags inside the container are still your responsibility. |
+| None | — | No analytics scripts |
+| Custom | One https script `src` per line (optional trailing SRI) | Those URLs only |
 
-- **What it is**: Chooses where analytics scripts come from.
-- **Options**:
-  - **Cloudflare Web Analytics**: loads Cloudflare’s beacon **after Analytics consent** (requires a site token).
-  - **None**: never loads third-party analytics scripts via EmPrivacy.
-  - **Custom**: loads your provided `https://` script URLs **after Analytics consent**.
-- **Behavior**:
-  - Changing this alters which scripts are injected when Analytics consent is granted.
-  - This does not affect Marketing scripts (those are separate).
+IDs and URLs are validated on save and again in the browser before inject. Tokens are never shown in the public vendor list.
 
-### Cloudflare Web Analytics site token
+### Script host allowlist (optional)
 
-- **What it is**: The token Cloudflare gives you for your site under Cloudflare → Web Analytics.
-- **Example**: a Cloudflare token string copied from your dashboard (do not add quotes).
-- **Behavior**:
-  - When Analytics consent is granted and **Analytics platform = Cloudflare**, EmPrivacy injects Cloudflare’s standard beacon script with the `data-cf-beacon` attribute.
-  - If the token is blank, EmPrivacy will have nothing to inject for Cloudflare analytics even if consent is granted.
+One hostname per line (e.g. `cdn.example.com`). When non-empty, **Custom** analytics, **Umami**, and **Marketing** script hosts must appear on the list. Built-in preset CDNs (Plausible, Fathom, GTM, etc.) stay allowed for their presets.
 
-### Custom analytics script URLs (one https URL per line, not a `<script>` tag)
+### Optional Subresource Integrity (SRI)
 
-- **What it is**: A list of third-party analytics scripts to load after Analytics consent, when **Analytics platform = Custom**.
-- **Format**: one full **`https://…`** URL per line (the script `src`), no HTML.
-- **Example**:
+Append a hash after the URL on Custom or Marketing lines:
 
-  ```text
-  https://cdn.example.com/analytics.js
-  https://static.example.net/vendor/tracker.min.js
-  ```
+```
+https://cdn.example/a.js sha384-…
+https://cdn.example/b.js integrity=sha256-…
+```
 
-- **Behavior**:
-  - When Analytics consent is granted, EmPrivacy injects each URL as `<script src="…">` into the document.
-  - When Analytics consent is denied, these scripts are not injected by EmPrivacy.
+The browser sets `integrity` + `crossorigin=anonymous` when the hash is valid. Prefer pinning Custom scripts; many preset CDNs do not publish stable hashes.
 
 ---
 
-## Marketing settings
+## Marketing scripts
 
-Marketing scripts only load after the visitor consents to **Marketing**.
-
-### Marketing script URLs (one https URL per line, not a `<script>` tag)
-
-- **What it is**: A list of third-party marketing scripts to load after Marketing consent.
-- **Format**: one full **`https://…`** URL per line (the script `src`), no HTML.
-- **Example**:
-
-  ```text
-  https://cdn.example.com/pixel.js
-  https://static.example.net/ads/retargeting.js
-  ```
-
-- **Behavior**:
-  - When Marketing consent is granted, EmPrivacy injects each URL as `<script src="…">`.
-  - When Marketing consent is denied, these scripts are not injected by EmPrivacy.
+One **https** URL per line, `src` only (optional SRI as above). Loaded after **Marketing** consent. Max 50 lines, 2048 characters each. No HTML.
 
 ---
 
-## Google integrations (optional)
+## Google Consent Mode v2
 
-### Google Consent Mode v2 (denied defaults in head; updates after choice)
+When enabled, a denied-by-default snippet runs in `<head>` (`analytics_storage`, `ad_*`, `functionality_storage`, `personalization_storage`). After a choice, EmPrivacy calls `gtag('consent','update', …)`. `security_storage` stays granted. Validate with [Google’s docs](https://support.google.com/tagmanager/answer/13695607).
 
-- **What it is**: Enables Google Consent Mode v2 integration.
-- **Behavior**:
-  - When enabled, EmPrivacy emits a “denied by default” consent configuration early (in `<head>`).
-  - After the visitor chooses, EmPrivacy calls `gtag("consent","update", …)` to reflect Analytics/Marketing choices.
-  - This is only meaningful if your site uses `gtag`/Google tags; you should validate behavior using Google tooling/docs.
+Put EmPrivacy **first** in `plugins` if other plugins also inject Google tags.
 
 ---
 
-## Server-side logging (optional)
+## Embeds
 
-### Log consent choices to the server (minimal record; no IP stored)
+### Gate official EmDash embed blocks
 
-- **What it is**: If enabled, EmPrivacy will send a minimal consent snapshot to the server when a visitor saves a choice.
-- **Behavior**:
-  - When enabled, the browser sends a POST to the EmPrivacy record endpoint with:
-    - the current policy version
-    - whether analytics was allowed
-    - whether marketing was allowed
-  - The settings page will additionally show **Recent consent records** (up to 15), newest first.
-  - When disabled, EmPrivacy does not attempt to log consent server-side and the “Recent consent records” section will not appear.
+When on (default), EmPrivacy’s Portable Text components replace YouTube, Vimeo, tweet, Bluesky, Mastodon, Gist, and link-preview blocks with a placeholder until the selected category is allowed.
 
+YouTube / Vimeo become allowlisted iframes (`youtube-nocookie.com`, `player.vimeo.com`). Social posts, Gists, and link previews become **https links** — EmPrivacy will not iframe an arbitrary Mastodon or unknown host.
+
+This does **not** rewrite raw HTML `<iframe>` tags you paste in the theme or in an HTML block.
+
+### Embeds require this category
+
+**Marketing** (default) or **Functional**. Pick Marketing for YouTube/social if those vendors set advertising cookies.
+
+**Allow embeds and load** opens the cookie preferences panel with a short hint. It does **not** silently grant Functional or Marketing.
+
+Registration order: see [GETTING_STARTED](./GETTING_STARTED.md#registration-order).
+
+---
+
+## Consent cookie lifetime
+
+### Consent cookie lifetime (days)
+
+`Max-Age` for `emprivacy_cc`, **1–365**, default **180**. Keep this aligned with how long you need to remember a choice under your policy.
+
+---
+
+## Theme
+
+Hex colors only (`#111`, `#111111`). Corner radius is an integer **0–24**. Values become CSS variables on `#emprivacy-root`. Other CSS is ignored (no `url()`, no `expression`).
+
+---
+
+## Server-side logging
+
+When enabled, each save POSTs `{ policyVersion, functional, analytics, marketing }` to `/_emdash/api/plugins/emprivacy/record` (same origin, JSON). The handler requires a matching `Origin` **or** `Sec-Fetch-Site: same-origin`, fails closed if storage capacity cannot be checked, and rate-limits anonymous clients (~30/hour fingerprint). No IP is stored in the consent row. The page shows up to 15 recent rows. Logging stops at 500 rows.
+
+---
+
+## Content Security Policy
+
+EmPrivacy injects an **inline** bootstrap via EmDash `page:fragments`. Sites with a strict CSP must allow that script, typically:
+
+- `script-src 'unsafe-inline'` (or a hash/nonce of the emitted bootstrap if your host supports it), and
+- `script-src` / `connect-src` / `frame-src` entries for any presets and gated embeds you enable (e.g. `https://plausible.io`, `https://www.youtube-nocookie.com`, `https://player.vimeo.com`).
+
+YouTube/Vimeo placeholders use a tight iframe `sandbox` (`allow-scripts allow-same-origin allow-presentation`) after consent. Client hydration also re-checks allowlisted `data-src` values so a planted evil URL cannot become an iframe.
+
+A future hashed static bootstrap (no `'unsafe-inline'`) depends on EmDash fragment APIs exposing nonces or external script URLs.
+
+---
+
+## What this site uses
+
+Read-only table generated from the saved config. Same data as `GET /_emdash/api/plugins/emprivacy/vendors`. Use it in your cookie policy. It never includes tokens or measurement IDs.
