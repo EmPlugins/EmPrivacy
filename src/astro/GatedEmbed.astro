@@ -1,0 +1,70 @@
+---
+// SPDX-License-Identifier: MIT
+import { resolveEmbed } from "./embed-resolve.js";
+
+interface Props {
+	node: {
+		_type?: string;
+		id?: string;
+		poster?: string;
+		title?: string;
+	};
+}
+
+const { node } = Astro.props;
+const resolved = resolveEmbed(node ?? {});
+---
+
+{
+	resolved ? (
+		<div
+			class="emprivacy-embed"
+			data-emprivacy-embed={resolved.kind}
+			data-src={resolved.src}
+			data-mode={resolved.mode}
+			data-label={resolved.label}
+		>
+			{resolved.poster ? (
+				<img class="emprivacy-embed-poster" src={resolved.poster} alt="" width="480" height="270" />
+			) : null}
+			<p class="emprivacy-embed-copy">{resolved.label} is blocked until you allow the matching cookie category.</p>
+			<button type="button" class="emprivacy-embed-btn" data-emprivacy-embed-load>
+				Allow embeds and load
+			</button>
+		</div>
+	) : (
+		<p class="emprivacy-embed-invalid">This embed could not be displayed.</p>
+	)
+}
+
+<style>
+	.emprivacy-embed {
+		display: grid;
+		gap: 0.75rem;
+		place-items: center;
+		padding: 1.25rem;
+		border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+		border-radius: 8px;
+		background: color-mix(in srgb, currentColor 6%, transparent);
+		text-align: center;
+		aspect-ratio: 16 / 9;
+	}
+	.emprivacy-embed-poster {
+		max-width: 100%;
+		height: auto;
+		border-radius: 6px;
+	}
+	.emprivacy-embed-copy,
+	.emprivacy-embed-invalid {
+		margin: 0;
+		max-width: 36rem;
+	}
+	.emprivacy-embed-btn {
+		border-radius: 6px;
+		border: 1px solid currentColor;
+		background: transparent;
+		color: inherit;
+		padding: 0.5rem 0.85rem;
+		cursor: pointer;
+	}
+</style>

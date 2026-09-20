@@ -26,7 +26,7 @@ git commit -s -m "feat: describe the change"
 
 ## Principles
 
-- Scope: native `page:fragments` CMP, KV-backed admin (Block Kit), no arbitrary admin HTML execution on the public site (see the main [README](./README.md#requirements) and [docs/TESTING.md](./docs/TESTING.md)).
+- Scope: native `page:fragments` CMP, optional Portable Text embed placeholders, KV-backed admin (Block Kit), no arbitrary admin HTML execution on the public site (see the main [README](./README.md#what-it-does-not-do) and [docs/TESTING.md](./docs/TESTING.md)).
 - Match EmDash’s [native plugin](https://docs.emdashcms.com/plugins/creating-native-plugins/your-first-native-plugin/) layout: `emprivacyPlugin()` descriptor (`format: "native"`) + named `createPlugin()` / `definePlugin()` runtime.
 - Keep the default surface small: do not add `network:request` unless a feature truly needs it.
 

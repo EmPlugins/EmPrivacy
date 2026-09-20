@@ -14,21 +14,39 @@ import { z } from "zod";
 import {
 	assertValidSavedConfig,
 	type EmprivacyConfig,
-	COOKIE_NAME,
+	isPolicyPagePath,
 	KV_KEY,
 	normalizeConfig,
 	PLUGIN_ID,
 	type EmprivacyPublicRuntimeConfig,
 	type ConsentRecordPayload,
 	resolvePolicyHref,
+	resolvePublicCopy,
 } from "./config.js";
+import {
+	fetchLatestPublishedVersion,
+	pluginVersionFields,
+	pluginVersionNote,
+} from "./npm-version.js";
+import { buildBodyBootstrap, buildGoogleConsentHeadScript } from "./public-bootstrap.js";
+import {
+	assertSameOriginMutation,
+	cookieMaxAgeSeconds,
+	rateHourKey,
+} from "./security.js";
+import { buildAnalyticsLoader, buildVendorList } from "./vendors.js";
 import { VERSION } from "./version.js";
+
+/** Soft cap for anonymous consent POSTs per client fingerprint per UTC hour. */
+const RECORD_RATE_LIMIT = 30;
+const RECORD_LOG_CAP = 500;
 
 const ADMIN_SETTINGS_PATH = "/settings";
 const SAVE_ACTION_ID = "emprivacy-save";
 
 const recordInput = z.object({
 	policyVersion: z.string().trim().min(1).max(64),
+	functional: z.boolean(),
 	analytics: z.boolean(),
 	marketing: z.boolean(),
 });
@@ -47,12 +65,10 @@ async function saveConfigString(ctx: PluginContext, json: string): Promise<void>
 	await ctx.kv.set(KV_KEY, json);
 }
 
-/** Path-only record URL for browser fetch (same origin). */
 function recordPathForSite(): string {
 	return `/_emdash/api/plugins/${PLUGIN_ID}/record`;
 }
 
-/** Absolute URL for metadata / banner; paths resolved via EmDash `ctx.url()`. */
 function absolutePolicyHref(stored: string, ctx: PluginContext): string | null {
 	const r = resolvePolicyHref(stored, ctx).trim();
 	if (!r) return null;
@@ -65,316 +81,93 @@ function absolutePolicyHref(stored: string, ctx: PluginContext): string | null {
 	}
 }
 
-function buildGoogleConsentHeadScript(): string {
-	return `(function(){window.dataLayer=window.dataLayer||[];function g(){window.dataLayer.push(arguments);}window.gtag=g;g("consent","default",{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","functionality_storage":"granted","security_storage":"granted","personalization_storage":"denied"});})();`;
+function clientFingerKey(request: Request): string {
+	const cf = request.headers.get("cf-connecting-ip")?.trim();
+	const xff = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+	const ua = (request.headers.get("user-agent") ?? "").slice(0, 120);
+	return `${cf || xff || "unknown"}|${ua}`;
 }
 
-/**
- * Public-site bootstrap: no HTML from admin strings in DOM APIs beyond JSON.parse —
- * banner copy is applied with textContent / createTextNode.
- */
-function buildBodyBootstrap(pr: EmprivacyPublicRuntimeConfig): string {
-	const jsonLiteral = JSON.stringify(pr).replace(/[<>&\u2028\u2029]/g, (c) => {
-		switch (c) {
-			case "<":
-				return "\\u003c";
-			case ">":
-				return "\\u003e";
-			case "&":
-				return "\\u0026";
-			case "\u2028":
-				return "\\u2028";
-			case "\u2029":
-				return "\\u2029";
-			default:
-				return c;
-		}
-	});
-
-	return `(function(){
-var C=${jsonLiteral};
-var CN="${COOKIE_NAME}";
-function readCookie(){
-try{
-var m=document.cookie.match(new RegExp("(?:^|;\\\\s*)"+CN+"=([^;]*)"));
-var v=m?decodeURIComponent(m[1]):"";
-if(!v||v.length>1024)return"";
-return v;
-}catch(e){return"";}
-}
-function writeCookie(val){
-var secure=document.location.protocol==="https:"?"; Secure":"";
-document.cookie=CN+"="+encodeURIComponent(val)+"; Path=/; SameSite=Lax"+secure+"; Max-Age=31536000";
-}
-function parseState(s){
-try{
-var o=JSON.parse(s);
-if(!o||typeof o!=="object")return null;
-if(typeof o.v!=="string")return null;
-if(o.v!==C.policyVersion)return null;
-var a=o.a,m=o.m;
-var aOk=(a===0||a===1||a===true||a===false);
-var mOk=(m===0||m===1||m===true||m===false);
-if(!aOk||!mOk)return null;
-return {v:o.v,a:!!a,m:!!m};
-}catch(e){return null;}
-}
-function needBanner(){
-var c=parseState(readCookie());
-if(!c)return true;
-return false;
-}
-function alreadyScriptSrc(u){
-try{
-return Array.prototype.some.call(document.getElementsByTagName("script"),function(s){
-return s.src===u;
-});
-}catch(e){
-return false;
-}
-}
-function loadScript(src){
-if(alreadyScriptSrc(src))return;
-var e=document.createElement("script");
-e.src=src;e.async=true;e.referrerPolicy="no-referrer-when-downgrade";
-document.head.appendChild(e);
-}
-function loadCloudflareBeacon(token){
-var u="https://static.cloudflareinsights.com/beacon.min.js";
-if(!token)return;
-if(alreadyScriptSrc(u))return;
-var e=document.createElement("script");
-e.src=u;
-e.defer=true;
-e.setAttribute("data-cf-beacon",JSON.stringify({token:token}));
-e.referrerPolicy="no-referrer-when-downgrade";
-document.head.appendChild(e);
-}
-function applyScripts(a,m){
-if(a){
-if(C.analyticsProvider==="cloudflare"){
-loadCloudflareBeacon(C.cloudflareToken);
-}else if(C.analyticsProvider==="custom"){
-C.analyticsScriptUrls.forEach(loadScript);
-}
-}
-if(m)C.marketingScriptUrls.forEach(loadScript);
-}
-function gtagUpdate(a,m){
-if(!C.googleConsentMode||!window.gtag)return;
-window.gtag("consent","update",{
-analytics_storage:a?"granted":"denied",
-ad_storage:m?"granted":"denied",
-ad_user_data:m?"granted":"denied",
-ad_personalization:m?"granted":"denied",
-personalization_storage:m?"granted":"denied"
-});
-}
-function logServer(a,m){
-if(!C.logConsent)return;
-var p=C.recordPath;
-fetch(p,{
-method:"POST",
-credentials:"same-origin",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({policyVersion:C.policyVersion,analytics:!!a,marketing:!!m})
-}).catch(function(){});
-}
-function hide(el){if(el)el.setAttribute("hidden","");el&&(el.style.display="none");}
-function show(el){if(el)el.removeAttribute("hidden");el&&(el.style.display="");}
-function mount(){
-var root=document.getElementById("emprivacy-root");
-if(!root)return;
-var trigger=document.createElement("button");
-trigger.type="button";
-trigger.className="emprivacy-cookie-trigger";
-trigger.setAttribute("aria-label","Cookie and privacy settings");
-var ic=document.createElement("span");
-ic.setAttribute("aria-hidden","true");
-ic.className="emprivacy-cookie-trigger-icon";
-ic.appendChild(document.createTextNode("🍪"));
-trigger.appendChild(ic);
-function showTrigger(){
-trigger.removeAttribute("hidden");
-}
-function hideTrigger(){
-trigger.setAttribute("hidden","");
-}
-function mkRow(label,id,on){
-var w=document.createElement("label");
-w.className="emprivacy-switch";
-var cb=document.createElement("input");
-cb.type="checkbox";
-cb.id=id;
-cb.checked=on;
-w.appendChild(cb);
-w.appendChild(document.createTextNode(" "+label));
-return {wrap:w,box:cb};
-}
-function addPolicyLinks(links){
-function addOne(href,text){
-if(!href)return;
-var ok=href.indexOf("https://")===0;
-if(!ok)return;
-var a=document.createElement("a");
-a.href=href;
-a.rel="nofollow noopener";
-a.target="_blank";
-a.appendChild(document.createTextNode(text));
-links.appendChild(a);
-}
-addOne(C.privacyPolicyUrl,"Privacy policy");
-if(C.cookiePolicyUrl)addOne(C.cookiePolicyUrl,"Cookie policy");
-}
-function openReopenPanel(){
-if(root.querySelector(".emprivacy-bar--reopen"))return;
-var st=parseState(readCookie());
-if(!st)return;
-hideTrigger();
-var aOn=!!st.a;
-var mOn=!!st.m;
-var bar=document.createElement("div");
-bar.className="emprivacy-bar emprivacy-bar--reopen";
-bar.setAttribute("role","dialog");
-bar.setAttribute("aria-modal","true");
-var title=document.createElement("h2");
-title.className="emprivacy-title";
-title.appendChild(document.createTextNode(C.bannerTitle));
-var msg=document.createElement("p");
-msg.className="emprivacy-msg";
-msg.appendChild(document.createTextNode(C.bannerMessage));
-var links=document.createElement("div");
-links.className="emprivacy-links";
-addPolicyLinks(links);
-var opts=document.createElement("div");
-opts.className="emprivacy-opts";
-var er=mkRow("Analytics","emprivacy-ra",aOn);
-var mr=mkRow("Marketing","emprivacy-rm",mOn);
-opts.appendChild(er.wrap);
-opts.appendChild(mr.wrap);
-var actions=document.createElement("div");
-actions.className="emprivacy-actions";
-function doReopenPersist(a,m){
-writeCookie(JSON.stringify({v:C.policyVersion,a:a?1:0,m:m?1:0}));
-logServer(a,m);
-location.reload();
-}
-var btnAll=document.createElement("button");
-btnAll.type="button";
-btnAll.className="emprivacy-btn emprivacy-btn-primary";
-btnAll.appendChild(document.createTextNode("Accept all"));
-btnAll.addEventListener("click",function(){doReopenPersist(true,true);});
-var btnRej=document.createElement("button");
-btnRej.type="button";
-btnRej.className="emprivacy-btn";
-btnRej.appendChild(document.createTextNode("Reject non-essential"));
-btnRej.addEventListener("click",function(){doReopenPersist(false,false);});
-var btnSave=document.createElement("button");
-btnSave.type="button";
-btnSave.className="emprivacy-btn emprivacy-btn-primary";
-btnSave.appendChild(document.createTextNode("Save choices"));
-btnSave.addEventListener("click",function(){doReopenPersist(!!er.box.checked,!!mr.box.checked);});
-var btnClose=document.createElement("button");
-btnClose.type="button";
-btnClose.className="emprivacy-btn";
-btnClose.appendChild(document.createTextNode("Close"));
-btnClose.addEventListener("click",function(){
-if(bar.parentNode)bar.parentNode.removeChild(bar);
-showTrigger();
-});
-actions.appendChild(btnAll);
-actions.appendChild(btnRej);
-actions.appendChild(btnSave);
-actions.appendChild(btnClose);
-bar.appendChild(title);
-bar.appendChild(msg);
-bar.appendChild(links);
-bar.appendChild(opts);
-bar.appendChild(actions);
-root.appendChild(bar);
-}
-root.appendChild(trigger);
-hideTrigger();
-if(!needBanner()){
-var st=parseState(readCookie());
-applyScripts(!!(st&&st.a),!!(st&&st.m));
-gtagUpdate(!!(st&&st.a),!!(st&&st.m));
-showTrigger();
-trigger.addEventListener("click",function(){openReopenPanel();});
-return;
-}
-var aOn=C.strictDefaults?false:true;
-var mOn=C.strictDefaults?false:true;
-var bar=document.createElement("div");
-bar.className="emprivacy-bar";
-bar.setAttribute("role","dialog");
-bar.setAttribute("aria-modal","false");
-var title=document.createElement("h2");
-title.className="emprivacy-title";
-title.appendChild(document.createTextNode(C.bannerTitle));
-var msg=document.createElement("p");
-msg.className="emprivacy-msg";
-msg.appendChild(document.createTextNode(C.bannerMessage));
-var links=document.createElement("div");
-links.className="emprivacy-links";
-addPolicyLinks(links);
-var opts=document.createElement("div");
-opts.className="emprivacy-opts";
-opts.setAttribute("hidden","");
-var er=mkRow("Analytics","emprivacy-a",aOn);
-var mr=mkRow("Marketing","emprivacy-m",mOn);
-opts.appendChild(er.wrap);
-opts.appendChild(mr.wrap);
-var actions=document.createElement("div");
-actions.className="emprivacy-actions";
-function persist(a,m){
-writeCookie(JSON.stringify({v:C.policyVersion,a:a?1:0,m:m?1:0}));
-logServer(a,m);
-// For Cloudflare Web Analytics (and most tag-based analytics), injecting after load can miss the initial pageview.
-// Reload ensures the script runs in the normal page lifecycle immediately after consent is persisted.
-location.reload();
-}
-var btnAll=document.createElement("button");
-btnAll.type="button";
-btnAll.className="emprivacy-btn emprivacy-btn-primary";
-btnAll.appendChild(document.createTextNode("Accept all"));
-btnAll.addEventListener("click",function(){persist(true,true);});
-var btnRej=document.createElement("button");
-btnRej.type="button";
-btnRej.className="emprivacy-btn";
-btnRej.appendChild(document.createTextNode("Reject non-essential"));
-btnRej.addEventListener("click",function(){persist(false,false);});
-var btnCust=document.createElement("button");
-btnCust.type="button";
-btnCust.className="emprivacy-btn";
-btnCust.appendChild(document.createTextNode("Customize"));
-btnCust.addEventListener("click",function(){show(opts);btnSave.removeAttribute("hidden");});
-var btnSave=document.createElement("button");
-btnSave.type="button";
-btnSave.className="emprivacy-btn emprivacy-btn-primary";
-btnSave.setAttribute("hidden","");
-btnSave.appendChild(document.createTextNode("Save choices"));
-btnSave.addEventListener("click",function(){persist(!!er.box.checked,!!mr.box.checked);});
-actions.appendChild(btnAll);
-actions.appendChild(btnRej);
-actions.appendChild(btnCust);
-actions.appendChild(btnSave);
-bar.appendChild(title);
-bar.appendChild(msg);
-bar.appendChild(links);
-bar.appendChild(opts);
-bar.appendChild(actions);
-root.appendChild(bar);
-}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",mount);
-else mount();
-})();`;
+async function hashFinger(s: string): Promise<string> {
+	const data = new TextEncoder().encode(`emprivacy-rl:${s}`);
+	const dig = await crypto.subtle.digest("SHA-256", data);
+	return Array.from(new Uint8Array(dig))
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("")
+		.slice(0, 32);
 }
 
-/**
- * Native EmDash runtime — loaded via the named `createPlugin` export.
- * Uses `page:fragments`, which requires trusted in-process (native) execution.
- */
+async function allowRecordWrite(ctx: PluginContext, request: Request): Promise<boolean> {
+	const key = `consent:rl:${rateHourKey()}:${await hashFinger(clientFingerKey(request))}`;
+	try {
+		const raw = (await ctx.kv.get(key)) as string | null;
+		const n = raw && /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
+		if (n >= RECORD_RATE_LIMIT) return false;
+		await ctx.kv.set(key, String(n + 1));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function publicRuntime(
+	cfg: EmprivacyConfig,
+	ctx: PluginContext,
+	page: { locale: string | null; path: string },
+): EmprivacyPublicRuntimeConfig {
+	const copy = resolvePublicCopy(cfg, page.locale);
+	const hideBanner = cfg.hideBannerOnPolicyPages && isPolicyPagePath(page.path, cfg);
+	return {
+		bannerTitle: copy.bannerTitle,
+		bannerMessage: copy.bannerMessage,
+		privacyPolicyUrl: absolutePolicyHref(cfg.privacyPolicyUrl, ctx) ?? "",
+		cookiePolicyUrl: cfg.cookiePolicyUrl ? (absolutePolicyHref(cfg.cookiePolicyUrl, ctx) ?? "") : "",
+		strictDefaults: cfg.strictDefaults,
+		policyVersion: cfg.policyVersion,
+		googleConsentMode: cfg.googleConsentMode,
+		logConsent: cfg.logConsentToServer,
+		recordPath: recordPathForSite(),
+		embedCategory: cfg.embedCategory,
+		gateEmbeds: cfg.gateEmbeds,
+		hideBanner,
+		theme: cfg.theme,
+		ui: copy.ui,
+		loader: buildAnalyticsLoader(cfg),
+		marketingScripts: cfg.marketingScriptUrls.map((src) => ({
+			src,
+			integrity: cfg.scriptIntegrity[src] ?? null,
+		})),
+		scriptHostAllowlist: cfg.scriptHostAllowlist,
+		scriptIntegrity: cfg.scriptIntegrity,
+		cookieMaxAge: cookieMaxAgeSeconds(cfg.cookieMaxAgeDays),
+		vendors: buildVendorList(cfg),
+	};
+}
+
+function themeStyle(): string {
+	return `<style id="emprivacy-style">
+#emprivacy-root{font-family:system-ui,sans-serif;font-size:14px;--emprivacy-bg:#111111;--emprivacy-text:#eeeeee;--emprivacy-accent:#3b82f6;--emprivacy-radius:6px}
+.emprivacy-bar{position:fixed;z-index:99999;left:0;right:0;bottom:0;background:var(--emprivacy-bg);color:var(--emprivacy-text);padding:16px 20px 20px;box-shadow:0 -4px 24px rgba(0,0,0,.25);max-height:45vh;overflow:auto}
+.emprivacy-title{margin:0 0 8px;font-size:1.1rem}
+.emprivacy-msg,.emprivacy-note{margin:0 0 10px;line-height:1.4;opacity:.95}
+.emprivacy-note{font-size:.85rem}
+.emprivacy-links a{color:var(--emprivacy-accent);margin-right:12px}
+.emprivacy-opts{margin:10px 0;border-top:1px solid color-mix(in srgb,var(--emprivacy-text) 20%,transparent);padding-top:10px}
+.emprivacy-switch{display:block;margin:6px 0}
+.emprivacy-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.emprivacy-btn{border-radius:var(--emprivacy-radius);border:1px solid color-mix(in srgb,var(--emprivacy-text) 35%,transparent);background:transparent;color:var(--emprivacy-text);padding:8px 12px;cursor:pointer}
+.emprivacy-btn-primary{background:var(--emprivacy-accent);border-color:var(--emprivacy-accent);color:#fff}
+.emprivacy-cookie-trigger{position:fixed;z-index:99998;left:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:1px solid color-mix(in srgb,var(--emprivacy-text) 35%,transparent);background:var(--emprivacy-bg);color:var(--emprivacy-text);box-shadow:0 2px 12px rgba(0,0,0,.2);cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+.emprivacy-cookie-trigger:hover{filter:brightness(1.1)}
+.emprivacy-cookie-trigger:focus{outline:2px solid var(--emprivacy-accent);outline-offset:2px}
+.emprivacy-cookie-trigger[hidden]{display:none!important}
+.emprivacy-cookie-trigger-icon{font-size:1.35rem;line-height:1}
+.emprivacy-bar--reopen{z-index:100000}
+.emprivacy-vendors{margin:10px 0 0}
+.emprivacy-vendors ul{margin:8px 0 0;padding-left:1.2rem}
+</style>`;
+}
+
 export function createPlugin() {
 	return definePlugin({
 		id: PLUGIN_ID,
@@ -393,244 +186,251 @@ export function createPlugin() {
 			],
 		},
 		hooks: {
-		"plugin:install": async (_e: unknown, ctx: PluginContext) => {
-			const existing = (await ctx.kv.get(KV_KEY)) as string | null;
-			if (!existing) {
-				await saveConfigString(ctx, JSON.stringify(normalizeConfig({})));
-				ctx.log.info("EmPrivacy: seeded default configuration");
-			}
-		},
-		"page:metadata": {
-			handler: async (
-				_e: PageMetadataEvent,
-				ctx: PluginContext,
-			): Promise<PageMetadataContribution | PageMetadataContribution[] | null> => {
-				const cfg = await loadConfig(ctx);
-				const out: PageMetadataContribution[] = [];
-				const privacyHref = absolutePolicyHref(cfg.privacyPolicyUrl, ctx);
-				if (privacyHref) {
-					out.push({
-						kind: "link",
-						rel: "site.standard.document",
-						href: privacyHref,
-						key: "emprivacy:privacy",
-					});
+			"plugin:install": async (_e: unknown, ctx: PluginContext) => {
+				const existing = (await ctx.kv.get(KV_KEY)) as string | null;
+				if (!existing) {
+					await saveConfigString(ctx, JSON.stringify(normalizeConfig({})));
+					ctx.log.info("EmPrivacy: seeded default configuration");
 				}
-				const cookieHref = cfg.cookiePolicyUrl
-					? absolutePolicyHref(cfg.cookiePolicyUrl, ctx)
-					: null;
-				if (cookieHref) {
-					out.push({
-						kind: "meta",
-						name: "cookie-policy",
-						content: cookieHref,
-						key: "emprivacy:cookie-meta",
-					});
-				}
-				return out.length ? out : null;
 			},
-		},
-		"page:fragments": {
-			handler: async (
-				_e: PageFragmentEvent,
-				ctx: PluginContext,
-			): Promise<PageFragmentContribution | PageFragmentContribution[] | null> => {
-				const cfg = await loadConfig(ctx);
-				const privacyResolved = absolutePolicyHref(cfg.privacyPolicyUrl, ctx) ?? "";
-				const cookieResolved = cfg.cookiePolicyUrl
-					? absolutePolicyHref(cfg.cookiePolicyUrl, ctx) ?? ""
-					: "";
-				const pr: EmprivacyPublicRuntimeConfig = {
-					bannerTitle: cfg.bannerTitle,
-					bannerMessage: cfg.bannerMessage,
-					privacyPolicyUrl: privacyResolved,
-					cookiePolicyUrl: cookieResolved,
-					strictDefaults: cfg.strictDefaults,
-					policyVersion: cfg.policyVersion,
-					analyticsProvider: cfg.analyticsProvider,
-					cloudflareToken: cfg.cloudflareWebAnalyticsToken,
-					analyticsScriptUrls: cfg.analyticsScriptUrls,
-					marketingScriptUrls: cfg.marketingScriptUrls,
-					googleConsentMode: cfg.googleConsentMode,
-					logConsent: cfg.logConsentToServer,
-					recordPath: recordPathForSite(),
-				};
-
-				const style: PageFragmentContribution = {
-					kind: "html",
-					placement: "body:end",
-					key: "emprivacy:style",
-					html: `<style id="emprivacy-style">
-#emprivacy-root{font-family:system-ui,sans-serif;font-size:14px}
-.emprivacy-bar{position:fixed;z-index:99999;left:0;right:0;bottom:0;background:#111;color:#eee;padding:16px 20px 20px;box-shadow:0 -4px 24px rgba(0,0,0,.25);max-height:45vh;overflow:auto}
-.emprivacy-title{margin:0 0 8px;font-size:1.1rem}
-.emprivacy-msg{margin:0 0 10px;line-height:1.4;opacity:.95}
-.emprivacy-links a{color:#8ecbff;margin-right:12px}
-.emprivacy-opts{margin:10px 0;border-top:1px solid #333;padding-top:10px}
-.emprivacy-switch{display:block;margin:6px 0}
-.emprivacy-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.emprivacy-btn{border-radius:6px;border:1px solid #555;background:#222;color:#eee;padding:8px 12px;cursor:pointer}
-.emprivacy-btn-primary{background:#3b82f6;border-color:#3b82f6;color:#fff}
-.emprivacy-cookie-trigger{position:fixed;z-index:99998;left:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:1px solid #555;background:#222;color:#e8b86d;box-shadow:0 2px 12px rgba(0,0,0,.2);cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
-.emprivacy-cookie-trigger:hover{background:#2a2a2a}
-.emprivacy-cookie-trigger:focus{outline:2px solid #3b82f6;outline-offset:2px}
-.emprivacy-cookie-trigger[hidden]{display:none!important}
-.emprivacy-cookie-trigger-icon{font-size:1.35rem;line-height:1}
-.emprivacy-bar--reopen{z-index:100000}
-</style>`,
-				};
-
-				const shell: PageFragmentContribution = {
-					kind: "html",
-					placement: "body:end",
-					key: "emprivacy:shell",
-					html: `<div id="emprivacy-root" data-emprivacy="1"></div>`,
-				};
-
-				const headScripts: PageFragmentContribution[] = [];
-				if (cfg.googleConsentMode) {
-					headScripts.push({
-						kind: "inline-script",
-						placement: "head",
-						key: "emprivacy:gcm-default",
-						code: buildGoogleConsentHeadScript(),
-					});
-				}
-
-				const boot: PageFragmentContribution = {
-					kind: "inline-script",
-					placement: "body:end",
-					key: "emprivacy:boot",
-					code: buildBodyBootstrap(pr),
-				};
-
-				return [...headScripts, style, shell, boot];
-			},
-		},
-	},
-	routes: {
-		admin: {
-			handler: async (ctx: RouteContext) => {
-				const interaction = ctx.input as
-					| { type: string; page?: string; action_id?: string; values?: Record<string, unknown> }
-					| undefined;
-
-				if (interaction?.type === "page_load" && interaction.page === ADMIN_SETTINGS_PATH) {
-					return buildSettingsPage(ctx);
-				}
-				if (interaction?.type === "form_submit" && interaction.action_id === SAVE_ACTION_ID) {
-					const v = interaction.values ?? {};
-					const asBool = (x: unknown) => {
-						if (x === true) return true;
-						if (x === false) return false;
-						if (typeof x === "string") return x === "true" || x === "on" || x === "1";
-						return Boolean(x);
-					};
-
-					try {
-						const next = assertValidSavedConfig({
-							bannerTitle: String(v.banner_title ?? ""),
-							bannerMessage: String(v.banner_message ?? ""),
-							privacyPolicyUrl: String(v.privacy_url ?? ""),
-							cookiePolicyUrl: String(v.cookie_url ?? ""),
-							strictDefaults: asBool(v.strict_defaults),
-							policyVersion: String(v.policy_version ?? ""),
-							analyticsPlatform: String(v.analytics_platform ?? "cloudflare"),
-							cloudflareToken: String(v.cloudflare_token ?? ""),
-							analyticsUrlsText: String(v.analytics_urls ?? ""),
-							marketingUrlsText: String(v.marketing_urls ?? ""),
-							googleConsentMode: asBool(v.google_cm),
-							logConsentToServer: asBool(v.log_server),
+			"page:metadata": {
+				handler: async (
+					_e: PageMetadataEvent,
+					ctx: PluginContext,
+				): Promise<PageMetadataContribution | PageMetadataContribution[] | null> => {
+					const cfg = await loadConfig(ctx);
+					const out: PageMetadataContribution[] = [];
+					const privacyHref = absolutePolicyHref(cfg.privacyPolicyUrl, ctx);
+					if (privacyHref) {
+						out.push({
+							kind: "link",
+							rel: "site.standard.document",
+							href: privacyHref,
+							key: "emprivacy:privacy",
 						});
-						await saveConfigString(ctx, JSON.stringify(next));
-						const page = await buildSettingsPage(ctx);
-						return {
-							...page,
-							toast: { message: "EmPrivacy settings saved.", type: "success" },
-						};
-					} catch (e) {
-						const msg = e instanceof Error ? e.message : "Save failed.";
-						const page = await buildSettingsPage(ctx);
-						return {
-							...page,
-							toast: { message: msg, type: "error" },
-						};
 					}
-				}
-
-				return { blocks: [] };
+					const cookieHref = cfg.cookiePolicyUrl
+						? absolutePolicyHref(cfg.cookiePolicyUrl, ctx)
+						: null;
+					if (cookieHref) {
+						out.push({
+							kind: "meta",
+							name: "cookie-policy",
+							content: cookieHref,
+							key: "emprivacy:cookie-meta",
+						});
+					}
+					return out.length ? out : null;
+				},
+			},
+			"page:fragments": {
+				handler: async (
+					e: PageFragmentEvent,
+					ctx: PluginContext,
+				): Promise<PageFragmentContribution | PageFragmentContribution[] | null> => {
+					const cfg = await loadConfig(ctx);
+					const pr = publicRuntime(cfg, ctx, e.page);
+					const style: PageFragmentContribution = {
+						kind: "html",
+						placement: "body:end",
+						key: "emprivacy:style",
+						html: themeStyle(),
+					};
+					const shell: PageFragmentContribution = {
+						kind: "html",
+						placement: "body:end",
+						key: "emprivacy:shell",
+						html: `<div id="emprivacy-root" data-emprivacy="1"></div>`,
+					};
+					const headScripts: PageFragmentContribution[] = [];
+					if (cfg.googleConsentMode) {
+						headScripts.push({
+							kind: "inline-script",
+							placement: "head",
+							key: "emprivacy:gcm-default",
+							code: buildGoogleConsentHeadScript(),
+						});
+					}
+					const boot: PageFragmentContribution = {
+						kind: "inline-script",
+						placement: "body:end",
+						key: "emprivacy:boot",
+						code: buildBodyBootstrap(pr),
+					};
+					return [...headScripts, style, shell, boot];
+				},
 			},
 		},
-		record: {
-			public: true,
-			input: recordInput,
-			handler: async (ctx: RouteContext) => {
-				if (ctx.request.method !== "POST") {
-					return { ok: false };
-				}
-				// Same-origin hardening: this is a public route, but it should be called by pages on the site.
-				// If the browser sends an Origin header, enforce it to block cross-site POSTs (basic CSRF mitigation).
-				try {
-					const origin = ctx.request.headers.get("origin");
-					if (origin) {
-						const expected = new URL(ctx.url("/")).origin;
-						if (origin !== expected) return new Response("forbidden", { status: 403 });
-					}
-				} catch {
-					return new Response("bad_request", { status: 400 });
-				}
+		routes: {
+			admin: {
+				handler: async (ctx: RouteContext) => {
+					const interaction = ctx.input as
+						| { type: string; page?: string; action_id?: string; values?: Record<string, unknown> }
+						| undefined;
 
-				const ct = ctx.request.headers.get("content-type") ?? "";
-				if (!ct.toLowerCase().includes("application/json")) {
-					return new Response("unsupported_media_type", { status: 415 });
-				}
-
-				const cfg = await loadConfig(ctx);
-				if (!cfg.logConsentToServer) {
-					return { ok: false, reason: "logging_disabled" };
-				}
-				const input = ctx.input as z.infer<typeof recordInput>;
-				// Prevent log poisoning: only accept records for the active configured policyVersion.
-				if (input.policyVersion !== cfg.policyVersion) {
-					return new Response("policy_version_mismatch", { status: 400 });
-				}
-				const row: ConsentRecordPayload = {
-					createdAt: new Date().toISOString(),
-					policyVersion: input.policyVersion,
-					analytics: input.analytics,
-					marketing: input.marketing,
-				};
-				// Soft abuse mitigation: cap total stored rows (best-effort).
-				try {
-					const existing = await ctx.storage.consentEvents.query({
-						orderBy: { createdAt: "desc" },
-						limit: 500,
-					});
-					if (existing.items.length >= 500) {
-						return { ok: false, reason: "log_full" };
+					if (interaction?.type === "page_load" && interaction.page === ADMIN_SETTINGS_PATH) {
+						return buildSettingsPage(ctx);
 					}
-				} catch {
-					// If query fails, proceed (storage may not support query on this host).
-				}
-				await ctx.storage.consentEvents.put(
-					`${Date.now()}-${Math.random().toString(36).slice(2)}`,
-					row,
-				);
-				return { ok: true };
+					if (interaction?.type === "form_submit" && interaction.action_id === SAVE_ACTION_ID) {
+						const v = interaction.values ?? {};
+						const asBool = (x: unknown) => {
+							if (x === true) return true;
+							if (x === false) return false;
+							if (typeof x === "string") return x === "true" || x === "on" || x === "1";
+							return Boolean(x);
+						};
+
+						try {
+							const next = assertValidSavedConfig({
+								bannerTitle: String(v.banner_title ?? ""),
+								bannerMessage: String(v.banner_message ?? ""),
+								privacyPolicyUrl: String(v.privacy_url ?? ""),
+								cookiePolicyUrl: String(v.cookie_url ?? ""),
+								strictDefaults: asBool(v.strict_defaults),
+								policyVersion: String(v.policy_version ?? ""),
+								analyticsPlatform: String(v.analytics_platform ?? "cloudflare"),
+								cloudflareToken: String(v.cloudflare_token ?? ""),
+								analyticsId: String(v.analytics_id ?? ""),
+								umamiScriptUrl: String(v.umami_script_url ?? ""),
+								analyticsUrlsText: String(v.analytics_urls ?? ""),
+								marketingUrlsText: String(v.marketing_urls ?? ""),
+								scriptHostAllowlistText: String(v.script_host_allowlist ?? ""),
+								cookieMaxAgeDays: String(v.cookie_max_age_days ?? "180"),
+								googleConsentMode: asBool(v.google_cm),
+								logConsentToServer: asBool(v.log_server),
+								embedCategory: String(v.embed_category ?? "marketing"),
+								gateEmbeds: asBool(v.gate_embeds),
+								hideBannerOnPolicyPages: asBool(v.hide_on_policy),
+								defaultLocale: String(v.default_locale ?? "en"),
+								localeOverridesText: String(v.locale_overrides ?? ""),
+								themeBg: String(v.theme_bg ?? ""),
+								themeText: String(v.theme_text ?? ""),
+								themeAccent: String(v.theme_accent ?? ""),
+								themeRadius: String(v.theme_radius ?? ""),
+							});
+							await saveConfigString(ctx, JSON.stringify(next));
+							const page = await buildSettingsPage(ctx);
+							return {
+								...page,
+								toast: { message: "EmPrivacy settings saved.", type: "success" },
+							};
+						} catch (e) {
+							const msg = e instanceof Error ? e.message : "Save failed.";
+							const page = await buildSettingsPage(ctx);
+							return {
+								...page,
+								toast: { message: msg, type: "error" },
+							};
+						}
+					}
+
+					return { blocks: [] };
+				},
+			},
+			record: {
+				public: true,
+				input: recordInput,
+				handler: async (ctx: RouteContext) => {
+					if (ctx.request.method !== "POST") {
+						return new Response("method_not_allowed", { status: 405 });
+					}
+					let expectedOrigin: string;
+					try {
+						expectedOrigin = new URL(ctx.url("/")).origin;
+					} catch {
+						return new Response("bad_request", { status: 400 });
+					}
+					const csrf = assertSameOriginMutation(ctx.request, expectedOrigin);
+					if (csrf) return csrf;
+
+					const ct = ctx.request.headers.get("content-type") ?? "";
+					if (!ct.toLowerCase().includes("application/json")) {
+						return new Response("unsupported_media_type", { status: 415 });
+					}
+
+					const cfg = await loadConfig(ctx);
+					if (!cfg.logConsentToServer) {
+						return { ok: false, reason: "logging_disabled" };
+					}
+					const input = ctx.input as z.infer<typeof recordInput>;
+					if (input.policyVersion !== cfg.policyVersion) {
+						return new Response("policy_version_mismatch", { status: 400 });
+					}
+					if (!(await allowRecordWrite(ctx, ctx.request))) {
+						return new Response("rate_limited", { status: 429 });
+					}
+					const row: ConsentRecordPayload = {
+						createdAt: new Date().toISOString(),
+						policyVersion: input.policyVersion,
+						functional: input.functional,
+						analytics: input.analytics,
+						marketing: input.marketing,
+					};
+					try {
+						const existing = await ctx.storage.consentEvents.query({
+							orderBy: { createdAt: "desc" },
+							limit: RECORD_LOG_CAP,
+						});
+						if (existing.items.length >= RECORD_LOG_CAP) {
+							return { ok: false, reason: "log_full" };
+						}
+					} catch {
+						// Fail closed: never unbounded-write when capacity cannot be checked.
+						return { ok: false, reason: "storage_unavailable" };
+					}
+					await ctx.storage.consentEvents.put(
+						`${Date.now()}-${Math.random().toString(36).slice(2)}`,
+						row,
+					);
+					return { ok: true };
+				},
+			},
+			vendors: {
+				public: true,
+				handler: async (ctx: RouteContext) => {
+					if (ctx.request.method !== "GET") {
+						return new Response("method_not_allowed", { status: 405 });
+					}
+					const cfg = await loadConfig(ctx);
+					return { vendors: buildVendorList(cfg) };
+				},
 			},
 		},
-	},
 	});
 }
 
 export default createPlugin;
 
 async function buildSettingsPage(ctx: PluginContext) {
-	const cfg = await loadConfig(ctx);
-	const analyticsText = cfg.analyticsScriptUrls.join("\n");
-	const marketingText = cfg.marketingScriptUrls.join("\n");
+	const [cfg, latestPublished] = await Promise.all([
+		loadConfig(ctx),
+		fetchLatestPublishedVersion({
+			fetch: ctx.http?.fetch ?? globalThis.fetch,
+		}),
+	]);
+	const installedVersion = ctx.plugin?.version ?? VERSION;
+	const analyticsText = cfg.analyticsScriptUrls
+		.map((src) => {
+			const i = cfg.scriptIntegrity[src];
+			return i ? `${src} ${i}` : src;
+		})
+		.join("\n");
+	const marketingText = cfg.marketingScriptUrls
+		.map((src) => {
+			const i = cfg.scriptIntegrity[src];
+			return i ? `${src} ${i}` : src;
+		})
+		.join("\n");
 	const platform = cfg.analyticsProvider;
 	const docsUrl = "https://github.com/EmPlugins/EmPrivacy/blob/main/docs/PLUGIN_SETTINGS.md";
+	const vendorFields = buildVendorList(cfg).map((v) => ({
+		label: `${v.name} · ${v.category}`,
+		value: v.purpose,
+	}));
+	const localeOverridesText =
+		Object.keys(cfg.localeOverrides).length > 0
+			? JSON.stringify(cfg.localeOverrides, null, 2)
+			: "";
 
 	const consentFields = await (async () => {
 		try {
@@ -640,9 +440,11 @@ async function buildSettingsPage(ctx: PluginContext) {
 			});
 			return r.items.map((item) => {
 				const d = item.data as ConsentRecordPayload;
+				const functional =
+					typeof d.functional === "boolean" ? ` · functional ${d.functional ? "on" : "off"}` : "";
 				return {
 					label: d.createdAt,
-					value: `policy ${d.policyVersion} · analytics ${d.analytics ? "on" : "off"} · marketing ${d.marketing ? "on" : "off"}`,
+					value: `policy ${d.policyVersion}${functional} · analytics ${d.analytics ? "on" : "off"} · marketing ${d.marketing ? "on" : "off"}`,
 				};
 			});
 		} catch {
@@ -657,16 +459,24 @@ async function buildSettingsPage(ctx: PluginContext) {
 				text: "EmPrivacy — Cookie & consent",
 			},
 			{
+				type: "fields" as const,
+				fields: pluginVersionFields(installedVersion, latestPublished),
+			},
+			{
+				type: "context" as const,
+				text: pluginVersionNote(installedVersion, latestPublished),
+			},
+			{
 				type: "context" as const,
 				text: `Documentation: ${docsUrl}`,
 			},
 			{
 				type: "context" as const,
-				text: "Configure the public banner. **Analytics:** pick a platform (Cloudflare is built in — enter your **site token** from Cloudflare → Web Analytics; EmPrivacy injects the standard beacon with `data-cf-beacon` after consent). **None** = no third-party analytics scripts. **Custom** = one `https://` script URL per line, `src` only. **Marketing:** `https` script URLs, one per line, after marketing consent. No arbitrary admin HTML in the public site.",
+				text: "This plugin is a technical consent layer, not legal advice and not a privacy-policy generator. You still write and publish the legal pages. EmPrivacy does not scan your theme for leftover trackers, does not geo-locate visitors, and does not block first-party EmDash comments.",
 			},
 			{
 				type: "context" as const,
-				text: "Privacy / cookie links: use your EmDash **Page** public path (e.g. `/privacy` — same as in the browser address bar when you view that Page) or a full `https://…` URL if the policy is hosted elsewhere.",
+				text: "Privacy / cookie links: use your EmDash **Page** public path (e.g. `/privacy`) or a full `https://…` URL. Banner chrome follows the page locale when a built-in translation exists (en, de, fr, es, it, nl, pt, pl).",
 			},
 			{ type: "divider" as const },
 			{
@@ -676,15 +486,30 @@ async function buildSettingsPage(ctx: PluginContext) {
 					{
 						type: "text_input" as const,
 						action_id: "banner_title",
-						label: "Banner title",
+						label: "Banner title (fallback locale)",
 						initial_value: cfg.bannerTitle,
 					},
 					{
 						type: "text_input" as const,
 						action_id: "banner_message",
-						label: "Short notice",
+						label: "Short notice (fallback locale)",
 						multiline: true,
 						initial_value: cfg.bannerMessage,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "default_locale",
+						label: "Fallback locale code",
+						placeholder: "en",
+						initial_value: cfg.defaultLocale,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "locale_overrides",
+						label: "Optional title/message translations (JSON)",
+						placeholder: '{"de":{"bannerTitle":"Cookies & Datenschutz","bannerMessage":"…"}}\n',
+						multiline: true,
+						initial_value: localeOverridesText,
 					},
 					{
 						type: "text_input" as const,
@@ -709,8 +534,14 @@ async function buildSettingsPage(ctx: PluginContext) {
 					{
 						type: "toggle" as const,
 						action_id: "strict_defaults",
-						label: "Strict defaults (require opt-in for analytics & marketing)",
+						label: "Strict defaults (require opt-in for functional, analytics, and marketing)",
 						initial_value: cfg.strictDefaults,
+					},
+					{
+						type: "toggle" as const,
+						action_id: "hide_on_policy",
+						label: "Hide the first-visit banner on privacy and cookie policy pages",
+						initial_value: cfg.hideBannerOnPolicyPages,
 					},
 					{
 						type: "radio" as const,
@@ -718,6 +549,12 @@ async function buildSettingsPage(ctx: PluginContext) {
 						label: "Analytics platform",
 						options: [
 							{ value: "cloudflare", label: "Cloudflare Web Analytics" },
+							{ value: "plausible", label: "Plausible" },
+							{ value: "fathom", label: "Fathom" },
+							{ value: "umami", label: "Umami" },
+							{ value: "simpleanalytics", label: "Simple Analytics" },
+							{ value: "ga4", label: "Google Analytics 4" },
+							{ value: "gtm", label: "Google Tag Manager (requires Marketing consent)" },
 							{ value: "none", label: "None" },
 							{ value: "custom", label: "Custom (https script URLs, one per line)" },
 						],
@@ -733,9 +570,25 @@ async function buildSettingsPage(ctx: PluginContext) {
 					},
 					{
 						type: "text_input" as const,
+						action_id: "analytics_id",
+						label: "Analytics ID (domain, site ID, G-…, or GTM-…)",
+						placeholder: "example.com / G-XXXX / GTM-XXXX",
+						initial_value: cfg.analyticsId,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "umami_script_url",
+						label: "Umami script URL (https only)",
+						placeholder: "https://cloud.umami.is/script.js",
+						initial_value: cfg.umamiScriptUrl,
+						condition: { field: "analytics_platform", eq: "umami" },
+					},
+					{
+						type: "text_input" as const,
 						action_id: "analytics_urls",
-						label: "Custom analytics script URLs (one https URL per line, not a <script> tag)",
-						placeholder: "https://… (one per line)",
+						label:
+							"Custom analytics script URLs (one https URL per line; optional trailing SRI: … sha384-…)",
+						placeholder: "https://cdn.example/a.js sha384-…",
 						multiline: true,
 						initial_value: analyticsText,
 						condition: { field: "analytics_platform", eq: "custom" },
@@ -743,10 +596,27 @@ async function buildSettingsPage(ctx: PluginContext) {
 					{
 						type: "text_input" as const,
 						action_id: "marketing_urls",
-						label: "Marketing script URLs (one https URL per line, not a <script> tag)",
+						label:
+							"Marketing script URLs (one https URL per line; optional trailing SRI: … sha384-…)",
 						placeholder: "https://… (one per line)",
 						multiline: true,
 						initial_value: marketingText,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "script_host_allowlist",
+						label:
+							"Script host allowlist (optional; one hostname per line). When set, Custom analytics and marketing URLs must match.",
+						placeholder: "cdn.example.com\njs.stripe.com",
+						multiline: true,
+						initial_value: cfg.scriptHostAllowlist.join("\n"),
+					},
+					{
+						type: "text_input" as const,
+						action_id: "cookie_max_age_days",
+						label: "Consent cookie lifetime (days, 1–365, default 180)",
+						placeholder: "180",
+						initial_value: String(cfg.cookieMaxAgeDays),
 					},
 					{
 						type: "toggle" as const,
@@ -756,12 +626,69 @@ async function buildSettingsPage(ctx: PluginContext) {
 					},
 					{
 						type: "toggle" as const,
+						action_id: "gate_embeds",
+						label: "Gate official EmDash embed blocks (YouTube, Vimeo, social, Gist)",
+						initial_value: cfg.gateEmbeds,
+					},
+					{
+						type: "radio" as const,
+						action_id: "embed_category",
+						label: "Embeds require this category",
+						options: [
+							{ value: "marketing", label: "Marketing (recommended for YouTube / social)" },
+							{ value: "functional", label: "Functional" },
+						],
+						initial_value: cfg.embedCategory,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "theme_bg",
+						label: "Banner background (hex)",
+						placeholder: "#111111",
+						initial_value: cfg.theme.bg,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "theme_text",
+						label: "Banner text (hex)",
+						placeholder: "#eeeeee",
+						initial_value: cfg.theme.text,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "theme_accent",
+						label: "Banner accent (hex)",
+						placeholder: "#3b82f6",
+						initial_value: cfg.theme.accent,
+					},
+					{
+						type: "text_input" as const,
+						action_id: "theme_radius",
+						label: "Banner corner radius (0–24 px)",
+						placeholder: "6",
+						initial_value: String(cfg.theme.radiusPx),
+					},
+					{
+						type: "toggle" as const,
 						action_id: "log_server",
-						label: "Log consent choices to the server (minimal record; no IP stored)",
+						label: "Log consent choices to the server (minimal record; no IP; rate-limited; Origin/Sec-Fetch-Site required)",
 						initial_value: cfg.logConsentToServer,
 					},
 				],
 				submit: { label: "Save settings", action_id: SAVE_ACTION_ID },
+			},
+			{ type: "divider" as const },
+			{
+				type: "header" as const,
+				text: "What this site uses",
+			},
+			{
+				type: "context" as const,
+				text: "Generated from your current settings. Paste this into your cookie policy if you want a living vendor list. Also available at `/_emdash/api/plugins/emprivacy/vendors`. Tokens and script IDs are not included.",
+			},
+			{
+				type: "fields" as const,
+				fields: vendorFields,
 			},
 			...(cfg.logConsentToServer && consentFields.length > 0
 				? [

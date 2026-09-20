@@ -34,11 +34,14 @@ Perform a full security review of the EmPrivacy codebase. Identify concrete vuln
 ### Context (EmPrivacy behavior)
 
 EmPrivacy is an EmDash CMS plugin that provides:
-- A cookie consent banner with categories: essential / analytics / marketing
+- A cookie consent banner with categories: essential / functional / analytics / marketing
 - Client-side loading of third-party scripts **only after consent**
-- Admin-configured banner text, policy links, analytics config, marketing script URLs
-- Consent versioning stored in a consent cookie named `emprivacy_cc`
+- Optional gated placeholders for official EmDash embed blocks (allowlisted player hosts only)
+- Public `window.emprivacy` API for other plugins and themes
+- Admin-configured banner text, policy links, analytics presets, marketing script URLs, theme, i18n
+- Consent versioning stored in a consent cookie named `emprivacy_cc` as `{ v, f, a, m }`
 - Optional server logging to `/_emdash/api/plugins/emprivacy/record`
+- Generated vendor list (no tokens) at `/_emdash/api/plugins/emprivacy/vendors`
 - Optional Google Consent Mode v2 behavior
 
 EmDash context:
