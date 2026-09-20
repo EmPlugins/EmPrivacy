@@ -26,27 +26,29 @@ git commit -s -m "feat: describe the change"
 
 ## Principles
 
-- Scope: trusted `page:fragments` CMP, KV-backed admin (Block Kit), no arbitrary admin HTML execution on the public site (see the main [README](./README.md#requirements) and [docs/TESTING.md](./docs/TESTING.md)).
-- Match patterns from [`@emdash-cms/plugin-audit-log`](https://www.npmjs.com/package/@emdash-cms/plugin-audit-log): `tsdown`, `PluginDescriptor` + sandbox entry (`export default { … } satisfies SandboxedPlugin`, types from `emdash/plugin`).
-- Keep the default surface small: do not add `network:fetch` unless a feature truly needs it.
+- Scope: native `page:fragments` CMP, KV-backed admin (Block Kit), no arbitrary admin HTML execution on the public site (see the main [README](./README.md#requirements) and [docs/TESTING.md](./docs/TESTING.md)).
+- Match EmDash’s [native plugin](https://docs.emdashcms.com/plugins/creating-native-plugins/your-first-native-plugin/) layout: `emprivacyPlugin()` descriptor (`format: "native"`) + named `createPlugin()` / `definePlugin()` runtime.
+- Keep the default surface small: do not add `network:request` unless a feature truly needs it.
 
 ## Local setup
 
 ```bash
-npm install
-npm run typecheck
-npm run build
+pnpm install
+pnpm run typecheck
+pnpm run build
 ```
+
+Target **EmDash `^0.38.0`** and **Node.js `>= 22.16`**. Package name: **`@emplugins/emprivacy`**.
 
 ## Pull requests
 
-1. Describe the behavior change and how you tested it (EmDash version, trusted `plugins: []`).
-2. Run `npm run typecheck`, `npm run build`, and `npm test` before pushing.
+1. Describe the behavior change and how you tested it (EmDash version, native `plugins: []`).
+2. Run `pnpm run typecheck`, `pnpm run build`, and `pnpm test` before pushing.
 3. Keep commits focused; avoid unrelated formatting changes.
 
 ## Releases (maintainers)
 
-npm versions use **semver**; workflow and bump guidance: [docs/RELEASES.md](./docs/RELEASES.md).
+npm versions use **semver** via Changesets; workflow: [docs/RELEASES.md](./docs/RELEASES.md).
 
 ## Security
 

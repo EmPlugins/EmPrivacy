@@ -13,14 +13,17 @@ This guide is for site builders who want cookie consent working on an **EmDash**
 
 ## Before you begin
 
-1. An EmDash site with `emdash` in `astro.config` ([plugins overview](https://docs.emdashcms.com/plugins/overview/)).
+1. An EmDash site on **`emdash@^0.38.0`** with the EmDash Astro integration in `astro.config` ([plugins overview](https://docs.emdashcms.com/plugins/overview/)).
 2. Ability to edit **`astro.config`** and redeploy (or run locally).
+3. Plan to register EmPrivacy as a **native** plugin (`plugins: []`, not `sandboxed: []`) because it injects public page fragments.
 
 ---
 
 ## Step 1 — Install the package
 
 ```bash
+pnpm add @emplugins/emprivacy
+# or
 npm install @emplugins/emprivacy
 ```
 
@@ -32,13 +35,14 @@ The package is versioned with **semver** on npm; to pin a line, use a range such
 
 Open `astro.config.mjs` (or `.ts`).
 
-1. Import the plugin:
+1. Import the plugin and EmDash integration:
 
    ```ts
+   import emdash from "emdash/astro";
    import { emprivacyPlugin } from "@emplugins/emprivacy";
    ```
 
-2. Add **`emprivacyPlugin()`** to **`emdash({ plugins: [...] })`**. Put **EmPrivacy first** if you use other plugins that inject scripts or metadata.
+2. Add **`emprivacyPlugin()`** to **`emdash({ plugins: [...] })`**. Put **EmPrivacy first** if you use other plugins that inject scripts or metadata. Do **not** put it in `sandboxed: []`.
 
    ```ts
    emdash({
@@ -55,7 +59,7 @@ Open `astro.config.mjs` (or `.ts`).
 
 ## Step 3 — Layout must include EmDash hooks
 
-Your base layout must include EmDash’s head/body injection points (e.g. `<EmDashHead />`, `<EmDashBodyStart />`, `<EmDashBodyEnd />` or your theme’s equivalents). Otherwise the banner may not render. See [EmDash docs](https://docs.emdashcms.com/).
+Your base layout must include EmDash’s head/body injection points (e.g. `<EmDashHead page={page} />`, `<EmDashBodyStart page={page} />`, `<EmDashBodyEnd page={page} />`, usually with `createPublicPageContext` from `emdash/page`). Otherwise the banner may not render. See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/).
 
 ---
 
@@ -111,7 +115,7 @@ Each line must be a **full https URL** to a `.js` file (the script `src`). **Do 
 Run automated checks if you develop the plugin or CI:
 
 ```bash
-npm run typecheck && npm run build && npm test
+pnpm run typecheck && pnpm run build && pnpm test
 ```
 
 For a full staging checklist (banner, strict mode, admin, optional logging, Google), see **[TESTING.md](./TESTING.md)**.
@@ -122,9 +126,9 @@ For a full staging checklist (banner, strict mode, admin, optional logging, Goog
 
 | Problem | What to check |
 |--------|----------------|
-| Nothing appears | EmDash layout missing head/body components; plugin not in `plugins: []`; dev server restarted after config change |
+| Nothing appears | EmDash layout missing head/body components (with `page` context); plugin not in **`plugins: []`** (native — not `sandboxed: []`); dev server restarted after config change |
 | Scripts load before consent | No hard-coded third-party scripts in the theme; EmPrivacy listed **before** those plugins in `plugins` |
-| EmPrivacy missing in admin | Plugin not installed or `astro.config` wrong; check build errors |
+| EmPrivacy missing in admin | Plugin not installed or `astro.config` wrong; check build errors; confirm `format: "native"` / `createPlugin` package version |
 | Save fails on privacy/cookie | Value must be a **root-relative path** (`/something`) or **`https://…`** (not `http://` or a bare hostname) |
 | Save fails: “Invalid … script URL” | For **Custom** analytics or **Marketing** URLs, enter one **https URL** per line (the script `src`), not a `<script>` tag. See [Custom script URLs (not HTML)](#custom-script-urls-not-html) |
 | Privacy link 404 or wrong page | Path must match the live EmDash route (compare with the address bar when viewing that Page) |

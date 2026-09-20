@@ -43,7 +43,7 @@ EmPrivacy is an EmDash CMS plugin that provides:
 
 EmDash context:
 - EmDash is a TypeScript/Astro CMS.
-- Plugins may run in sandboxed Worker isolates with declared capabilities, but EmPrivacy is **trusted** and injects fragments/scripts into public pages.
+- EmPrivacy is a **native** plugin (`format: "native"`, `createPlugin()`), registered in `plugins: []`. It uses `page:fragments` and therefore runs in-process with the site (not as a sandboxed marketplace isolate).
 - Treat the plugin as **security-sensitive** because it injects code into public pages.
 
 ### Threat model

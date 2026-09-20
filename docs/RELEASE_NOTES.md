@@ -2,26 +2,11 @@
 
 # Unreleased
 
-# @emplugins/emprivacy v1.0.0 (pending Version Packages)
-
-## Breaking
-
-- **npm package renamed** — Install and import **`@emplugins/emprivacy`** ( [emplugins](https://www.npmjs.com/org/emplugins) org ). Legacy unscoped `emprivacy` is no longer the publish target.
-- **Sandbox entrypoint** — Descriptor uses `@emplugins/emprivacy/sandbox` (update only if you referenced the old entry string directly).
-
-## Unchanged
-
-- Runtime plugin id `emprivacy`, cookie `emprivacy_cc`, and API routes.
-- Source repository: [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
-
-# emprivacy v0.3.0
-
 ## Changes
 
-- **EmDash `>=0.14.0` required** — peer and dev dependency minimum raised from `^0.9.0`. Sites on EmDash 0.9–0.13 should stay on **emprivacy 0.2.x**.
-- **Plugin entry** — `src/sandbox-entry.ts` now default-exports a bare `{ hooks, routes } satisfies SandboxedPlugin` object (types from `emdash/plugin`), matching EmDash 0.13+ standard-format plugins and `@emdash-cms/plugin-audit-log`. No runtime `definePlugin()` import.
-- **CI** — matrix targets **EmDash `0.14.0`**.
-- **Kysely override** — Bumped to **`0.29.2`** so `npm audit` stays clean with `emdash@0.14.x` (see [docs/DEVELOPMENT.md](DEVELOPMENT.md)).
+- Compatibility: targets **EmDash `^0.38.0`** (tested with **`0.38.0`**); Node.js **`>= 22.16`**.
+- **Native plugin** — Switched from standard/sandbox entry packaging to EmDash’s native contract: `format: "native"`, named **`createPlugin()`** export, single-argument **`RouteContext`** route handlers, and no `./sandbox` export. Register **`emprivacyPlugin()`** from **`@emplugins/emprivacy`** in **`plugins: []`** (required for `page:fragments`).
+- Docs/README updated for scoped package install, `import emdash from "emdash/astro"`, layout page context, and native trust boundary.
 
 # emprivacy v0.2.1
 

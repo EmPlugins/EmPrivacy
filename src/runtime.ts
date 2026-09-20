@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: MIT
 
-import type { PageFragmentContribution, PageMetadataContribution } from "emdash";
-import type { PluginContext, SandboxedPlugin, SandboxedRequest } from "emdash/plugin";
+import { definePlugin } from "emdash";
+import type {
+	PageFragmentContribution,
+	PageFragmentEvent,
+	PageMetadataContribution,
+	PageMetadataEvent,
+	PluginContext,
+	RouteContext,
+} from "emdash";
 import { z } from "zod";
 
 import {
@@ -15,6 +22,7 @@ import {
 	type ConsentRecordPayload,
 	resolvePolicyHref,
 } from "./config.js";
+import { VERSION } from "./version.js";
 
 const ADMIN_SETTINGS_PATH = "/settings";
 const SAVE_ACTION_ID = "emprivacy-save";
@@ -37,14 +45,6 @@ async function loadConfig(ctx: PluginContext): Promise<EmprivacyConfig> {
 
 async function saveConfigString(ctx: PluginContext, json: string): Promise<void> {
 	await ctx.kv.set(KV_KEY, json);
-}
-
-function requestHeader(request: SandboxedRequest, name: string): string | null {
-	const target = name.toLowerCase();
-	for (const [key, value] of Object.entries(request.headers)) {
-		if (key.toLowerCase() === target) return value;
-	}
-	return null;
 }
 
 /** Path-only record URL for browser fetch (same origin). */
@@ -371,9 +371,29 @@ else mount();
 })();`;
 }
 
-export default {
-	hooks: {
-		"plugin:install": async (_e, ctx) => {
+/**
+ * Native EmDash runtime — loaded via the named `createPlugin` export.
+ * Uses `page:fragments`, which requires trusted in-process (native) execution.
+ */
+export function createPlugin() {
+	return definePlugin({
+		id: PLUGIN_ID,
+		version: VERSION,
+		capabilities: ["hooks.page-fragments:register"],
+		storage: {
+			consentEvents: { indexes: ["createdAt", "policyVersion"] },
+		},
+		admin: {
+			pages: [
+				{
+					path: ADMIN_SETTINGS_PATH,
+					label: "EmPrivacy",
+					icon: "shield",
+				},
+			],
+		},
+		hooks: {
+		"plugin:install": async (_e: unknown, ctx: PluginContext) => {
 			const existing = (await ctx.kv.get(KV_KEY)) as string | null;
 			if (!existing) {
 				await saveConfigString(ctx, JSON.stringify(normalizeConfig({})));
@@ -381,7 +401,10 @@ export default {
 			}
 		},
 		"page:metadata": {
-			handler: async (_e, ctx) => {
+			handler: async (
+				_e: PageMetadataEvent,
+				ctx: PluginContext,
+			): Promise<PageMetadataContribution | PageMetadataContribution[] | null> => {
 				const cfg = await loadConfig(ctx);
 				const out: PageMetadataContribution[] = [];
 				const privacyHref = absolutePolicyHref(cfg.privacyPolicyUrl, ctx);
@@ -408,7 +431,10 @@ export default {
 			},
 		},
 		"page:fragments": {
-			handler: async (_e, ctx) => {
+			handler: async (
+				_e: PageFragmentEvent,
+				ctx: PluginContext,
+			): Promise<PageFragmentContribution | PageFragmentContribution[] | null> => {
 				const cfg = await loadConfig(ctx);
 				const privacyResolved = absolutePolicyHref(cfg.privacyPolicyUrl, ctx) ?? "";
 				const cookieResolved = cfg.cookiePolicyUrl
@@ -484,8 +510,8 @@ export default {
 	},
 	routes: {
 		admin: {
-			handler: async (routeCtx, ctx) => {
-				const interaction = routeCtx.input as
+			handler: async (ctx: RouteContext) => {
+				const interaction = ctx.input as
 					| { type: string; page?: string; action_id?: string; values?: Record<string, unknown> }
 					| undefined;
 
@@ -538,14 +564,14 @@ export default {
 		record: {
 			public: true,
 			input: recordInput,
-			handler: async (routeCtx, ctx) => {
-				if (routeCtx.request.method !== "POST") {
+			handler: async (ctx: RouteContext) => {
+				if (ctx.request.method !== "POST") {
 					return { ok: false };
 				}
 				// Same-origin hardening: this is a public route, but it should be called by pages on the site.
 				// If the browser sends an Origin header, enforce it to block cross-site POSTs (basic CSRF mitigation).
 				try {
-					const origin = requestHeader(routeCtx.request, "origin");
+					const origin = ctx.request.headers.get("origin");
 					if (origin) {
 						const expected = new URL(ctx.url("/")).origin;
 						if (origin !== expected) return new Response("forbidden", { status: 403 });
@@ -554,7 +580,7 @@ export default {
 					return new Response("bad_request", { status: 400 });
 				}
 
-				const ct = requestHeader(routeCtx.request, "content-type") ?? "";
+				const ct = ctx.request.headers.get("content-type") ?? "";
 				if (!ct.toLowerCase().includes("application/json")) {
 					return new Response("unsupported_media_type", { status: 415 });
 				}
@@ -563,7 +589,7 @@ export default {
 				if (!cfg.logConsentToServer) {
 					return { ok: false, reason: "logging_disabled" };
 				}
-				const input = routeCtx.input as z.infer<typeof recordInput>;
+				const input = ctx.input as z.infer<typeof recordInput>;
 				// Prevent log poisoning: only accept records for the active configured policyVersion.
 				if (input.policyVersion !== cfg.policyVersion) {
 					return new Response("policy_version_mismatch", { status: 400 });
@@ -584,7 +610,7 @@ export default {
 						return { ok: false, reason: "log_full" };
 					}
 				} catch {
-					// Best-effort cap; proceed if query is unavailable.
+					// If query fails, proceed (storage may not support query on this host).
 				}
 				await ctx.storage.consentEvents.put(
 					`${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -594,7 +620,10 @@ export default {
 			},
 		},
 	},
-} satisfies SandboxedPlugin;
+	});
+}
+
+export default createPlugin;
 
 async function buildSettingsPage(ctx: PluginContext) {
 	const cfg = await loadConfig(ctx);

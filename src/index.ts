@@ -3,6 +3,7 @@
 import type { PluginDescriptor } from "emdash";
 
 import { PLUGIN_ID } from "./config.js";
+import { createPlugin } from "./runtime.js";
 import { VERSION } from "./version.js";
 
 export type {
@@ -21,20 +22,22 @@ export {
 	isValidPolicyHrefInput,
 } from "./config.js";
 
+export { createPlugin };
+export default createPlugin;
+
 /**
- * EmDash plugin descriptor — add to `plugins: []` in `emdash({ ... })` inside `astro.config`.
- * Requires **trusted** registration so `page:metadata` / `page:fragments` run (sandboxed plugins cannot inject fragments).
+ * EmDash native plugin descriptor — add to `plugins: []` in `emdash({ ... })` inside `astro.config`.
+ *
+ * EmPrivacy uses `page:fragments` (banner + consent scripts), which only runs for **native**
+ * plugins registered in `plugins: []`. Do not place this descriptor in `sandboxed: []`.
+ * See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/).
  */
 export function emprivacyPlugin(): PluginDescriptor {
 	return {
 		id: PLUGIN_ID,
 		version: VERSION,
-		format: "standard",
-		entrypoint: "@emplugins/emprivacy/sandbox",
-		capabilities: ["hooks.page-fragments:register"],
-		storage: {
-			consentEvents: { indexes: ["createdAt", "policyVersion"] },
-		},
+		format: "native",
+		entrypoint: "@emplugins/emprivacy",
 		adminPages: [
 			{
 				path: "/settings",
