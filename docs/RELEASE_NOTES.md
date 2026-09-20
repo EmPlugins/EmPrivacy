@@ -4,6 +4,8 @@
 
 ## Changes
 
+- **Security hardening** — Client re-validates embed `data-src` and script URLs before inject; tighter YouTube/Vimeo iframe `sandbox`; GTM loads under **Marketing**; optional script host allowlist + SRI on Custom/Marketing URLs; configurable consent cookie TTL (default 180 days); soft-consent opens preferences instead of silently granting; `/record` requires Origin or `Sec-Fetch-Site: same-origin`, fails closed on storage errors, and rate-limits writes. CSP notes in [PLUGIN_SETTINGS](./PLUGIN_SETTINGS.md#content-security-policy).
+- **Publisher consent features** — Functional category (`f` in `emprivacy_cc`; older cookies without `f` re-prompt), `window.emprivacy` API, gated official EmDash embed placeholders (`@emplugins/emprivacy/astro`), banner i18n + hex theme tokens, analytics presets (Plausible, Fathom, Umami, Simple Analytics, GA4, GTM), generated vendor list (admin + public `/vendors` route). Cookie JSON is now `{ v, f, a, m }`.
 - Compatibility: targets **EmDash `^0.38.0`** (tested with **`0.38.0`**); Node.js **`>= 22.16`**.
 - **Native plugin** — Switched from standard/sandbox entry packaging to EmDash’s native contract: `format: "native"`, named **`createPlugin()`** export, single-argument **`RouteContext`** route handlers, and no `./sandbox` export. Register **`emprivacyPlugin()`** from **`@emplugins/emprivacy`** in **`plugins: []`** (required for `page:fragments`).
 - Docs/README updated for scoped package install, `import emdash from "emdash/astro"`, layout page context, and native trust boundary.

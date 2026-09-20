@@ -84,10 +84,23 @@ describe("assertValidSavedConfig", () => {
 		policyVersion: "1",
 		analyticsPlatform: "custom",
 		cloudflareToken: "",
+		analyticsId: "",
+		umamiScriptUrl: "",
 		analyticsUrlsText: "https://cdn.example/a.js",
 		marketingUrlsText: "",
+		scriptHostAllowlistText: "",
+		cookieMaxAgeDays: "180",
 		googleConsentMode: false,
 		logConsentToServer: false,
+		embedCategory: "marketing",
+		gateEmbeds: true,
+		hideBannerOnPolicyPages: true,
+		defaultLocale: "en",
+		localeOverridesText: "",
+		themeBg: "",
+		themeText: "",
+		themeAccent: "",
+		themeRadius: "6",
 	};
 
 	it("accepts valid https URLs for custom analytics", () => {
@@ -189,6 +202,56 @@ describe("assertValidSavedConfig", () => {
 				marketingUrlsText: many,
 			}),
 		).toThrow(/Marketing script URL list is too long/);
+	});
+
+	it("accepts a Plausible hostname and rejects a URL", () => {
+		const c = assertValidSavedConfig({
+			...base,
+			analyticsPlatform: "plausible",
+			analyticsId: "blog.example.com",
+			analyticsUrlsText: "",
+		});
+		expect(c.analyticsProvider).toBe("plausible");
+		expect(c.analyticsId).toBe("blog.example.com");
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsPlatform: "plausible",
+				analyticsId: "https://blog.example.com",
+				analyticsUrlsText: "",
+			}),
+		).toThrow(/hostname/);
+	});
+
+	it("rejects theme colors that are not hex", () => {
+		expect(() =>
+			assertValidSavedConfig({ ...base, themeBg: "url(https://evil)" }),
+		).toThrow(/hex color/);
+	});
+
+	it("accepts optional SRI and enforces script host allowlist", () => {
+		const c = assertValidSavedConfig({
+			...base,
+			analyticsUrlsText: "https://cdn.example/a.js sha384-abc123=",
+			scriptHostAllowlistText: "cdn.example",
+		});
+		expect(c.analyticsScriptUrls).toEqual(["https://cdn.example/a.js"]);
+		expect(c.scriptIntegrity["https://cdn.example/a.js"]).toBe("sha384-abc123=");
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsUrlsText: "https://evil.example/a.js",
+				scriptHostAllowlistText: "cdn.example",
+			}),
+		).toThrow(/allowlist/);
+	});
+
+	it("accepts cookie lifetime within range", () => {
+		const c = assertValidSavedConfig({ ...base, cookieMaxAgeDays: "90" });
+		expect(c.cookieMaxAgeDays).toBe(90);
+		expect(() => assertValidSavedConfig({ ...base, cookieMaxAgeDays: "999" })).toThrow(
+			/lifetime/,
+		);
 	});
 });
 

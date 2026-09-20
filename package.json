@@ -2,17 +2,19 @@
   "//": "SPDX-License-Identifier: MIT",
   "name": "@emplugins/emprivacy",
   "version": "2.0.0",
-  "description": "Cookie consent and privacy notices for EmDash (GDPR, CCPA/CIPA-oriented configuration)",
+  "description": "Cookie consent, gated embeds, and privacy notices for EmDash (GDPR, CCPA/CIPA-oriented configuration)",
   "type": "module",
   "main": "dist/index.mjs",
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.mts"
-    }
+    },
+    "./astro": "./src/astro/index.ts"
   },
   "files": [
     "dist",
+    "src/astro",
     "README.md",
     "LICENSE",
     "docs/DEVELOPMENT.md",
@@ -40,14 +42,14 @@
     "emdash": "^0.38.0"
   },
   "dependencies": {
-    "zod": "4.5.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.11",
+    "@changesets/cli": "^3.0.3",
     "emdash": "0.38.0",
-    "tsdown": "^0.20.3",
+    "tsdown": "^0.23.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.1"
   },
   "repository": {
     "type": "git",
@@ -64,7 +66,7 @@
   "pnpm": {
     "overrides": {
       "kysely": "0.29.6",
-      "zod": "4.5.4"
+      "zod": "4.6.5"
     }
   },
   "scripts": {
