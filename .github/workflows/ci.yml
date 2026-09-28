@@ -1,10 +1,15 @@
 name: CI
 
+# Marketplace actions are rejected: the EmPlugins org allows only actions
+# defined in this repository. Checkout and the toolchain are local steps.
 on:
   pull_request:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -16,12 +21,18 @@ jobs:
           - 1.0.1
     name: test (emdash@${{ matrix.emdash_version }})
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          REF="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" fetch --depth=1 origin "$REF"
+          git checkout --detach FETCH_HEAD
+      - name: Install Node.js and pnpm
+        run: bash scripts/ci-toolchain.sh
       - run: pnpm install --frozen-lockfile
       - run: pnpm add -D emdash@${{ matrix.emdash_version }}
       - run: pnpm run typecheck

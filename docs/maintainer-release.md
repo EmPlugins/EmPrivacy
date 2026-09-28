@@ -59,7 +59,9 @@ publish: pnpm release:publish
 
 ### CI pnpm setup
 
-Do **not** set `version:` on `pnpm/action-setup` when `package.json` has `"packageManager": "pnpm@…"`. Let `packageManager` drive the version.
+The EmPlugins organization allows only Actions defined in this repository (`local_only`). `ci.yml` and `release.yml` must not `uses:` marketplace actions such as `actions/checkout` or `changesets/action`. Checkout is a local `git fetch`, Node.js is the pinned tarball in `scripts/ci-toolchain.sh` (checksum verified), and Version Packages / npm publish / GitHub Release are `scripts/release-or-version.mjs`.
+
+Do **not** set `version:` on a pnpm setup action when `package.json` has `"packageManager": "pnpm@…"`. `scripts/ci-toolchain.sh` prepares that exact pnpm.
 
 ## Changeset hygiene
 
