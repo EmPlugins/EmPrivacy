@@ -73,8 +73,8 @@ Runs typecheck, test, build, verify:exports, audit, pack:check at `minPeerVersio
 
 ## Release plumbing
 
-- `publish:` in `release.yml` **must** be `pnpm release:publish` (no inline `&&`)
-- Omit `version` on `pnpm/action-setup` when `packageManager` is set in `package.json`
+- `publish:` path is `pnpm release:publish` inside `scripts/release-or-version.mjs` (no inline `&&` in a marketplace action)
+- EmPlugins org Actions policy is `local_only`. Do not add `uses:` of `actions/checkout`, `pnpm/action-setup`, or `changesets/action`. See `docs/maintainer-release.md`.
 - Publishable package name in changesets: `@emplugins/emprivacy`
 
 ## Troubleshooting
