@@ -6,6 +6,13 @@
 
 _(none)_
 
+# emprivacy v3.0.0
+
+## Changes
+
+- **EmDash 1.0 baseline** — Requires **`emdash@^1.0.1`** (tested with **`1.0.1`**). EmDash 0.x is not supported. Sites still on EmDash 0.38 should stay on `@emplugins/emprivacy@2`.
+- Remains a **native** plugin: `format: "native"`, named `createPlugin()`, `page:fragments`, and Portable Text embed placeholders. Register `emprivacyPlugin()` in `plugins: []`. The official plugin registry only accepts sandboxed plugins, so this package stays on npm.
+
 # emprivacy v2.1.0
 
 ## Changes

@@ -21,7 +21,7 @@ This guide is for **EmDash site managers** who want cookie consent on a live sit
 
 ## Before you begin
 
-1. An EmDash site on **`emdash@^0.38.0`** with the EmDash Astro integration in `astro.config`.
+1. An EmDash site on **`emdash@^1.0.1`** with the EmDash Astro integration in `astro.config`. EmDash 0.x is not supported.
 2. Ability to edit **`astro.config`** and redeploy (or run locally).
 3. Register EmPrivacy as a **native** plugin (`plugins: []`, not `sandboxed: []`).
 
@@ -35,7 +35,7 @@ pnpm add @emplugins/emprivacy
 npm install @emplugins/emprivacy
 ```
 
-Pin a line with a range such as `@emplugins/emprivacy@^1.0.0`. See [RELEASES.md](./RELEASES.md).
+Pin a line with a range such as `@emplugins/emprivacy@^3.0.0`. See [RELEASES.md](./RELEASES.md).
 
 ---
 

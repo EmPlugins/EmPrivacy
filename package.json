@@ -39,14 +39,14 @@
   "license": "MIT",
   "packageManager": "pnpm@9.15.4",
   "peerDependencies": {
-    "emdash": "^0.38.0"
+    "emdash": "^1.0.1"
   },
   "dependencies": {
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
-    "emdash": "0.38.0",
+    "emdash": "^1.0.1",
     "tsdown": "^0.23.0",
     "typescript": "^5.9.3",
     "vitest": "^5.0.1"

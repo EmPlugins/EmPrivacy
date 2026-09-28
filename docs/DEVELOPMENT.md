@@ -25,7 +25,7 @@ pnpm run build
 
 The full install (including the `emdash` **dev** tree) can report transitive advisories from EmDash’s tooling stack. Those are owned by the site’s EmDash upgrade path, not by EmPrivacy’s published tarball.
 
-**This repository pins Kysely** via `pnpm.overrides` in `package.json` (currently `0.29.6`, aligned with EmDash 0.38). Regenerate the lockfile with `pnpm install` after changing overrides.
+**This repository pins Kysely** via `pnpm.overrides` in `package.json` (currently `0.29.6`, aligned with EmDash 1.0.1). Regenerate the lockfile with `pnpm install` after changing overrides.
 
 ## Deprecation warnings you may still see
 
