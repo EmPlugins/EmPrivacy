@@ -23,10 +23,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_TERMINAL_PROMPT=0
+          git config --global --unset-all credential.helper || true
           git init -q .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git -c credential.helper= -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" fetch --depth=50 origin "${{ github.sha }}"
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ${AUTH}"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=50 origin "${{ github.sha }}"
           git checkout --detach FETCH_HEAD
+          git config --local --unset-all http.https://github.com/.extraheader
       - name: Install Node.js and pnpm
         run: bash scripts/ci-toolchain.sh
       - run: pnpm install --frozen-lockfile

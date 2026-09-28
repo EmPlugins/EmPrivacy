@@ -19,16 +19,34 @@ function run(cmd, args, { allowFail = false } = {}) {
 	return result.status ?? 1;
 }
 
+function gitEnv() {
+	return {
+		...process.env,
+		GIT_CONFIG_NOSYSTEM: "1",
+		GIT_TERMINAL_PROMPT: "0",
+	};
+}
+
+function useGithubAuth() {
+	spawnSync("git", ["config", "--global", "--unset-all", "credential.helper"], { env: gitEnv() });
+	const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
+	const result = spawnSync(
+		"git",
+		["config", "--local", "http.https://github.com/.extraheader", `AUTHORIZATION: basic ${auth}`],
+		{ env: gitEnv() },
+	);
+	if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
 function git(args, options) {
 	if (!token) {
 		console.error("GITHUB_TOKEN is required");
 		process.exit(1);
 	}
-	return run(
-		"git",
-		["-c", "credential.helper=", "-c", `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args],
-		options,
-	);
+	useGithubAuth();
+	const result = spawnSync("git", args, { stdio: "inherit", env: gitEnv() });
+	if (!options?.allowFail && result.status !== 0) process.exit(result.status ?? 1);
+	return result.status ?? 1;
 }
 
 function gitOutput(args) {
@@ -36,11 +54,8 @@ function gitOutput(args) {
 		console.error("GITHUB_TOKEN is required");
 		process.exit(1);
 	}
-	const result = spawnSync(
-		"git",
-		["-c", "credential.helper=", "-c", `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args],
-		{ encoding: "utf8" },
-	);
+	useGithubAuth();
+	const result = spawnSync("git", args, { encoding: "utf8", env: gitEnv() });
 	if (result.status !== 0) {
 		process.stderr.write(result.stderr ?? "");
 		process.exit(result.status ?? 1);
