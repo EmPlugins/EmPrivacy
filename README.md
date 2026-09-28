@@ -27,7 +27,7 @@
 
 ## Requirements
 
-- **EmDash** `^0.38.0` (**tested with `0.38.0`**; re-test on your deployed minor when upgrading).
+- **EmDash** `^1.0.1` (**tested with `1.0.1`**). EmDash 0.x is not supported.
 - **Node.js** `>= 22.16` (matches EmDash’s engine requirement).
 - Register as a **native** plugin in **`astro.config`** via `plugins: []` (not `sandboxed: []`). EmPrivacy uses `page:fragments` for the public banner and `componentsEntry` for embed placeholders. See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/) and [Plugin overview](https://docs.emdashcms.com/plugins/overview/).
 
@@ -41,7 +41,7 @@ npm install @emplugins/emprivacy
 
 Published under the [emplugins](https://www.npmjs.com/org/emplugins) npm org. Source: [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy). See [EMDASH_COMPAT.md](./EMDASH_COMPAT.md) for EmDash version mapping.
 
-Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^1.0.0`. Versioning: [docs/RELEASES.md](docs/RELEASES.md). Org publish: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
+Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^3.0.0`. Versioning: [docs/RELEASES.md](docs/RELEASES.md). Org publish: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
 
 The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@emplugins/emprivacy`.
 

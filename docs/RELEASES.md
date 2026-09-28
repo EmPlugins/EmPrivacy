@@ -25,7 +25,7 @@ These guards keep published tarballs consistent with `package.json` and avoid sh
 - **`dist/` is not committed** — It is listed in `.gitignore`. Build artifacts are produced locally, in CI, and **immediately before publish** via `prepublishOnly`.
 - **`prepublishOnly`** — Runs `sync:version` (keeps `src/version.ts` aligned with `package.json`), `typecheck`, `build`, `test`, **`verify:exports`**, and `pnpm audit`.
 - **`kysely` override** — The dev-dependency `emdash` can resolve an older `kysely`; `pnpm.overrides` in `package.json` pins a **patched** Kysely so `pnpm audit` stays clean. See [docs/DEVELOPMENT.md](DEVELOPMENT.md).
-- **Install range** — Pin consumers with semver as needed, e.g. `@emplugins/emprivacy@^1.0.0`.
+- **Install range** — Pin consumers with semver as needed, e.g. `@emplugins/emprivacy@^3.0.0`. Requires EmDash `^1.0.1`.
 
 Before publishing locally (usually unnecessary once CI is configured):
 
@@ -77,5 +77,5 @@ See [EMDASH_COMPAT.md](../EMDASH_COMPAT.md) for tested upstream versions and upg
 Pin with a range that matches your risk tolerance, for example:
 
 ```bash
-pnpm add @emplugins/emprivacy@^1.0.0
+pnpm add @emplugins/emprivacy@^3.0.0
 ```

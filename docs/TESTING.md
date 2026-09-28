@@ -16,7 +16,7 @@ These scripts do **not** start EmDash or drive a browser.
 
 ## Manual integration QA (required before production)
 
-Use a **staging** EmDash Astro app on **`emdash@^0.38.0`** with `emprivacyPlugin()` in **`plugins: []`**, layout wires (`EmDashHead` / body components with page context), and the same EmDash version you plan to ship.
+Use a **staging** EmDash Astro app on **`emdash@^1.0.1`** with `emprivacyPlugin()` in **`plugins: []`**, layout wires (`EmDashHead` / body components with page context), and the same EmDash version you plan to ship. EmDash 0.x is not supported.
 
 ### Core flows
 

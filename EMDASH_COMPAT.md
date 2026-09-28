@@ -2,10 +2,9 @@
 
 | @emplugins/emprivacy | Min EmDash (peer) | CI-tested EmDash | Notes |
 |----------------------|-------------------|------------------|-------|
-| **1.x** (current) | `^0.38.0` | `0.38.0` | Native plugin (`createPlugin`); register in `plugins: []` for `page:fragments` |
-| **0.3.x** | `>=0.14.0` | `0.14.0`, `0.29.0` | Standard/sandbox entry; trusted `plugins: []` |
-| **0.2.x** | EmDash 0.9–0.13 | — | Unscoped `emprivacy`; sites not yet on 0.14+ |
-| **0.1.x** | `^0.5.0` / `0.7.0` verified | — | Initial releases |
+| **3.x** (current) | `^1.0.1` | `1.0.1` | Native plugin (`createPlugin`); register in `plugins: []` for `page:fragments`. EmDash 0.x is not supported. |
+
+EmPrivacy 2.x was the last release for EmDash 0.38. It is not updated for EmDash 1.0.
 
 ## When EmDash releases
 
@@ -28,6 +27,6 @@ pnpm add @emplugins/emprivacy
 npm install @emplugins/emprivacy
 ```
 
-Peer dependency: **`emdash ^0.38.0`** on your EmDash site.
+Peer dependency: **`emdash ^1.0.1`** on your EmDash site.
 
 Upstream: [emdash-cms/emdash](https://github.com/emdash-cms/emdash)

@@ -38,7 +38,7 @@ pnpm run typecheck
 pnpm run build
 ```
 
-Target **EmDash `^0.38.0`** and **Node.js `>= 22.16`**. Package name: **`@emplugins/emprivacy`**.
+Target **EmDash `^1.0.1`** and **Node.js `>= 22.16`**. Package name: **`@emplugins/emprivacy`**. EmDash 0.x is not supported.
 
 ## Pull requests
 

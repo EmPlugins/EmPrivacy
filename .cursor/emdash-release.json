@@ -5,7 +5,7 @@
     "baseBranch": "main"
   },
   "emdash": {
-    "minPeerVersion": "0.14.0",
+    "minPeerVersion": "1.0.1",
     "pluginPackage": "@emplugins/emprivacy",
     "pluginPackageJson": "package.json"
   },

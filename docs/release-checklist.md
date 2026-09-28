@@ -9,7 +9,7 @@ Used by the EmDash release skill after publish (and for manual verification).
 - [ ] Pending changesets in `.changeset/` match intent (no stale major/minor).
 - [ ] Version bump matches conforming (**patch**) vs API/peer changes (**minor**/**major**).
 - [ ] CI green on the compatibility PR.
-- [ ] `peerDependencies.emdash` still correct (`>=0.14.0` unless intentionally raised).
+- [ ] `peerDependencies.emdash` still correct (`^1.0.1`; do not lower the floor to support EmDash 0.x).
 - [ ] `NPM_TOKEN` repo secret can publish `@emplugins/*` under the [emplugins](https://www.npmjs.com/org/emplugins) org.
 
 ## After Version Packages merge
