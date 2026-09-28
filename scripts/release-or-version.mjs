@@ -26,7 +26,7 @@ function git(args, options) {
 	}
 	return run(
 		"git",
-		["-c", `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args],
+		["-c", "credential.helper=", "-c", `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args],
 		options,
 	);
 }
@@ -38,7 +38,7 @@ function gitOutput(args) {
 	}
 	const result = spawnSync(
 		"git",
-		["-c", `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args],
+		["-c", "credential.helper=", "-c", `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args],
 		{ encoding: "utf8" },
 	);
 	if (result.status !== 0) {
