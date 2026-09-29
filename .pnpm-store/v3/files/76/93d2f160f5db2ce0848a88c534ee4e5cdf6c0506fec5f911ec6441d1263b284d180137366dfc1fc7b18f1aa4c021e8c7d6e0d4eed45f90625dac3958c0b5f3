@@ -1,0 +1,1833 @@
+import { c as __exportAll } from "./runner-nEzvnogG.mjs";
+import { t as validateIdentifier } from "./validate-BpwoDOgt.mjs";
+import { g as tableExists, s as isPostgres } from "./dialect-helpers-BcQvkHgn.mjs";
+import { getRequestContext } from "./request-context.mjs";
+import { i as InvalidCursorError } from "./types-CQPWhPxE.mjs";
+import { t as MediaRepository } from "./media-BBm8Wg3f.mjs";
+import { t as withTransaction } from "./transaction-0KOpOyMu.mjs";
+import { a as continueMediaUsageActivation, n as MediaUsageActivationVersionMismatchError, s as getMediaUsageActivationStatus, t as MEDIA_USAGE_ACTIVATION_RUNTIME_GENERATION } from "./activation-DyNTe_Tl.mjs";
+import { n as collectionDeletionCurrentTimestamp, r as deleteActivatedMediaUsageCollection, t as MediaUsageCollectionDeletionRepository } from "./collection-deletion-BCwaWTDw.mjs";
+import { _ as buildContentMediaUsageFieldFingerprint, b as jsonTextValues, d as refreshContentMediaUsageForWorkBatch, n as CONTENT_MEDIA_USAGE_COLLECTION_SCOPE, r as contentRefreshKey, t as CONTENT_MEDIA_USAGE_ADAPTER_ID, v as loadContentMediaUsageFields, x as CONTENT_SOURCE_SCHEMA_VERSION, y as MediaUsageRepository } from "./content-refresh-GTMyi2Xy.mjs";
+import { t as MediaUsageWorkRepository } from "./media-usage-work-C5B1zT1c.mjs";
+import { n as repairContentMediaUsageCollection, t as repairContentMediaUsageAll } from "./content-repair-CIMt5C0U.mjs";
+import { t as ErrorCode } from "./errors-DvMdNrgf.mjs";
+import { sql } from "kysely";
+import { ulid } from "ulidx";
+
+//#region src/media/usage/collection-deletion-processor.ts
+const MEDIA_USAGE_COLLECTION_DELETION_LIMITS = Object.freeze({
+	candidatesPerTick: 4,
+	rowsPerBatch: 50,
+	leaseDurationSeconds: 300,
+	maxAttempts: 5,
+	retryBaseSeconds: 30,
+	retryMaxSeconds: 900
+});
+async function processDueMediaUsageCollectionDeletions(db) {
+	const repository = new MediaUsageCollectionDeletionRepository(db);
+	const candidates = await repository.findDue(MEDIA_USAGE_COLLECTION_DELETION_LIMITS.candidatesPerTick);
+	if (candidates.length === 0) return {
+		candidateCount: await repository.hasNonterminal() ? 1 : 0,
+		claimedCount: 0,
+		outcome: "idle"
+	};
+	let claim = null;
+	for (const candidate of candidates) {
+		claim = await repository.claim({
+			collectionId: candidate.collectionId,
+			phase: candidate.phase,
+			leaseDurationSeconds: MEDIA_USAGE_COLLECTION_DELETION_LIMITS.leaseDurationSeconds
+		});
+		if (claim?.leaseToken) break;
+	}
+	if (!claim?.leaseToken) return {
+		candidateCount: candidates.length,
+		claimedCount: 0,
+		outcome: "claim_lost"
+	};
+	try {
+		const processed = await processClaimedDeletion(db, claim);
+		if (!processed.finalized && !processed.released && !await repository.release(claim)) return {
+			candidateCount: candidates.length,
+			claimedCount: 1,
+			outcome: "claim_lost"
+		};
+		return {
+			candidateCount: candidates.length,
+			claimedCount: 1,
+			outcome: processed.finalized ? "finalized" : "progress"
+		};
+	} catch (error) {
+		const terminal = claim.attemptCount + 1 >= MEDIA_USAGE_COLLECTION_DELETION_LIMITS.maxAttempts;
+		if (!await repository.recordFailure({
+			collectionId: claim.collectionId,
+			leaseToken: claim.leaseToken,
+			errorCode: "MEDIA_USAGE_COLLECTION_DELETION_FAILED",
+			terminal,
+			retryDelaySeconds: retryDelaySeconds$2(claim.attemptCount)
+		})) return {
+			candidateCount: candidates.length,
+			claimedCount: 1,
+			outcome: "claim_lost"
+		};
+		console.error("[media-usage:collection-deletion] Processing failed:", error);
+		return {
+			candidateCount: candidates.length,
+			claimedCount: 1,
+			outcome: terminal ? "failed" : "retry"
+		};
+	}
+}
+async function processClaimedDeletion(db, claim) {
+	if (claim.phase === "fence" || claim.phase === "registry" || claim.phase === "table") {
+		await deleteActivatedMediaUsageCollection(db, {
+			collectionId: claim.collectionId,
+			collectionSlug: claim.collectionSlug,
+			forceDelete: claim.forceDelete
+		}, {
+			frontPhaseLimit: 1,
+			claimed: claim
+		});
+		return {
+			finalized: false,
+			released: true
+		};
+	}
+	if (claim.phase === "work") await processWorkBatch(db, claim);
+	if (claim.phase === "sources") await processSourceBatch(db, claim);
+	if (claim.phase === "status") await processStatus(db, claim);
+	if (claim.phase === "finalize") {
+		await finalizeDeletion(db, claim);
+		return {
+			finalized: true,
+			released: true
+		};
+	}
+	return {
+		finalized: false,
+		released: false
+	};
+}
+async function processWorkBatch(db, claim) {
+	await withTransaction(db, async (trx) => {
+		const rows = await trx.selectFrom("_emdash_media_usage_work").select("content_id").where("collection_id", "=", claim.collectionId).$if(claim.workCursor !== null, (query) => query.where("content_id", ">", claim.workCursor)).orderBy("content_id", "asc").limit(MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch + 1).execute();
+		const batch = rows.slice(0, MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch);
+		if (batch.length > 0) await trx.deleteFrom("_emdash_media_usage_work").where("collection_id", "=", claim.collectionId).where("content_id", "in", batch.map((row) => row.content_id)).where(liveLeaseGuard(trx, claim)).execute();
+		await updateDeletion(trx, claim, {
+			phase: rows.length > MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch ? "work" : "sources",
+			work_cursor: rows.length > MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch ? batch.at(-1).content_id : null
+		});
+	});
+	return false;
+}
+async function processSourceBatch(db, claim) {
+	await withTransaction(db, async (trx) => {
+		let sourceKey = claim.sourceKey;
+		if (!sourceKey) {
+			const source = await trx.selectFrom("_emdash_media_usage_sources").select("source_key").where("source_type", "=", "content").where("collection_id", "=", claim.collectionId).orderBy("source_key", "asc").limit(1).executeTakeFirst();
+			if (!source) {
+				await updateDeletion(trx, claim, {
+					phase: "status",
+					source_key: null,
+					occurrence_cursor: null
+				});
+				return;
+			}
+			sourceKey = source.source_key;
+			await updateDeletion(trx, claim, {
+				source_key: sourceKey,
+				occurrence_cursor: null
+			});
+		}
+		const occurrences = await trx.selectFrom("_emdash_media_usage").select("id").where("source_key", "=", sourceKey).$if(claim.occurrenceCursor !== null, (query) => query.where("id", ">", claim.occurrenceCursor)).orderBy("id", "asc").limit(MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch + 1).execute();
+		const batch = occurrences.slice(0, MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch);
+		if (batch.length > 0) await trx.deleteFrom("_emdash_media_usage").where("source_key", "=", sourceKey).where("id", "in", batch.map((row) => row.id)).where(liveLeaseGuard(trx, claim)).execute();
+		if (occurrences.length > MEDIA_USAGE_COLLECTION_DELETION_LIMITS.rowsPerBatch) {
+			await updateDeletion(trx, claim, {
+				source_key: sourceKey,
+				occurrence_cursor: batch.at(-1).id
+			});
+			return;
+		}
+		await trx.deleteFrom("_emdash_media_usage_sources").where("source_key", "=", sourceKey).where("source_type", "=", "content").where("collection_id", "=", claim.collectionId).where(liveLeaseGuard(trx, claim)).execute();
+		await updateDeletion(trx, claim, {
+			source_key: null,
+			occurrence_cursor: null
+		});
+	});
+	return false;
+}
+async function processStatus(db, claim) {
+	await withTransaction(db, async (trx) => {
+		if (await exactCleanupRowsRemain(trx, claim, false)) throw new Error("Collection deletion cleanup is incomplete");
+		await trx.deleteFrom("_emdash_media_usage_reconciliations").where("collection_id", "=", claim.collectionId).where("collection_slug", "=", claim.collectionSlug).where(liveLeaseGuard(trx, claim)).execute();
+		await trx.deleteFrom("_emdash_media_usage_index_status").where("adapter_id", "=", "content-media").where("scope_type", "=", "collection").where("scope_key", "=", claim.collectionSlug).where("collection_id", "=", claim.collectionId).where(liveLeaseGuard(trx, claim)).execute();
+		await updateDeletion(trx, claim, { phase: "finalize" });
+	});
+	return false;
+}
+async function finalizeDeletion(db, claim) {
+	if (await tableExists(db, `ec_${claim.collectionSlug}`)) throw new Error("Collection table still exists during deletion finalization");
+	if (await exactCleanupRowsRemain(db, claim)) throw new Error("Collection deletion is incomplete");
+	if (await db.selectFrom("_emdash_collections").select("id").where("id", "=", claim.collectionId).where("slug", "=", claim.collectionSlug).executeTakeFirst()) throw new Error("Collection registry identity still exists");
+	const result = await db.deleteFrom("_emdash_media_usage_collection_deletions").where("collection_id", "=", claim.collectionId).where("collection_slug", "=", claim.collectionSlug).where("state", "=", "leased").where("phase", "=", "finalize").where("lease_token", "=", claim.leaseToken).where(liveLeaseGuard(db, claim)).executeTakeFirst();
+	if (Number(result.numDeletedRows ?? 0) !== 1) throw new Error("Collection deletion lost finalization");
+	return true;
+}
+async function exactCleanupRowsRemain(db, claim, includeStatus = true) {
+	const row = (await sql`
+		SELECT
+			EXISTS (
+				SELECT 1 FROM _emdash_media_usage_work
+				WHERE collection_id = ${claim.collectionId}
+			) AS work_present,
+			EXISTS (
+				SELECT 1 FROM _emdash_media_usage_sources
+				WHERE source_type = 'content' AND collection_id = ${claim.collectionId}
+			) AS source_present,
+			EXISTS (
+				SELECT 1 FROM _emdash_media_usage_index_status
+				WHERE adapter_id = 'content-media'
+					AND scope_type = 'collection'
+					AND scope_key = ${claim.collectionSlug}
+					AND collection_id = ${claim.collectionId}
+			) AS status_present
+	`.execute(db)).rows[0];
+	return Boolean(row?.work_present) || Boolean(row?.source_present) || includeStatus && Boolean(row?.status_present);
+}
+async function updateDeletion(db, claim, values) {
+	const result = await db.updateTable("_emdash_media_usage_collection_deletions").set({
+		...values,
+		attempt_count: 0,
+		last_error_code: null,
+		updated_at: collectionDeletionCurrentTimestamp(db)
+	}).where("collection_id", "=", claim.collectionId).where("state", "=", "leased").where("lease_token", "=", claim.leaseToken).where(liveLeaseGuard(db, claim)).executeTakeFirst();
+	if (Number(result.numUpdatedRows ?? 0) !== 1) throw new Error("Collection deletion lease was lost");
+}
+function liveLeaseGuard(db, claim) {
+	return isPostgres(db) ? sql`EXISTS (
+			SELECT 1 FROM _emdash_media_usage_collection_deletions AS deletion
+			WHERE deletion.collection_id = ${claim.collectionId}
+				AND deletion.state = 'leased'
+				AND deletion.lease_token = ${claim.leaseToken}
+				AND deletion.lease_expires_at::timestamptz > clock_timestamp()
+		)` : sql`EXISTS (
+			SELECT 1 FROM _emdash_media_usage_collection_deletions AS deletion
+			WHERE deletion.collection_id = ${claim.collectionId}
+				AND deletion.state = 'leased'
+				AND deletion.lease_token = ${claim.leaseToken}
+				AND deletion.lease_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		)`;
+}
+function retryDelaySeconds$2(attemptCount) {
+	return Math.min(MEDIA_USAGE_COLLECTION_DELETION_LIMITS.retryMaxSeconds, MEDIA_USAGE_COLLECTION_DELETION_LIMITS.retryBaseSeconds * 2 ** attemptCount);
+}
+
+//#endregion
+//#region src/media/usage/reconciliation.ts
+const ACTIVATION_KEY = "incremental_capture";
+const CONTENT_ADAPTER_ID = "content-media";
+const COLLECTION_SCOPE = "collection";
+const MAX_CANDIDATES = 100;
+const MAX_PORTABLE_DURATION_SECONDS = 365 * 24 * 60 * 60;
+const STABLE_ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
+var MediaUsageReconciliationRepository = class {
+	constructor(db) {
+		this.db = db;
+	}
+	async findByIdentity(collectionId, runToken) {
+		assertIdentity({
+			collectionId,
+			runToken
+		});
+		const row = await this.db.selectFrom("_emdash_media_usage_reconciliations").selectAll().where("collection_id", "=", collectionId).where("run_token", "=", runToken).executeTakeFirst();
+		return row ? rowToRecord(row) : null;
+	}
+	async beginRun(claim) {
+		const now = timestampOffset(this.db, 0);
+		const sameRun = sql`status = 'running' AND cursor = ${claim.runToken}`;
+		return (await this.db.updateTable("_emdash_media_usage_index_status as status").set({
+			status: "running",
+			started_at: sql`CASE WHEN ${sameRun} THEN started_at ELSE ${now} END`,
+			completed_at: null,
+			cursor: claim.runToken,
+			indexed_source_count: 0,
+			failed_source_count: 0,
+			last_error_code: null,
+			change_epoch: sql`CASE WHEN ${sameRun} THEN change_epoch ELSE change_epoch + 1 END`,
+			reconciliation_required: 1,
+			updated_at: now
+		}).where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where("status.collection_id", "=", claim.collectionId).where("status.scope_key", "=", claim.collectionSlug).where("status.capture_state", "=", "active").where("status.reconciliation_required", "=", 1).where((eb) => eb.or([eb("status.status", "!=", "running"), eb("status.cursor", "=", claim.runToken)])).where(this.liveClaimExists(claim)).returning("change_epoch").executeTakeFirst())?.change_epoch ?? null;
+	}
+	async findScanUpperId(claim) {
+		const tableName = contentTableName(claim.collectionSlug);
+		return (await sql`
+			SELECT content.id
+			FROM ${sql.ref(tableName)} AS content
+			WHERE ${this.liveClaimExistsSql(claim)}
+			ORDER BY content.id DESC
+			LIMIT 1
+		`.execute(this.db)).rows[0]?.id ?? null;
+	}
+	async initializeScan(input) {
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			target_epoch: input.targetEpoch,
+			field_fingerprint: input.fieldFingerprint,
+			phase: "scan",
+			scan_cursor: null,
+			scan_upper_id: input.scanUpperId,
+			source_cursor: null,
+			source_upper_key: null,
+			attempt_count: 0,
+			last_error_code: null,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", input.claim.collectionId).where("reconciliation.run_token", "=", input.claim.runToken).where("reconciliation.target_epoch", "is", null).where("reconciliation.state", "=", "leased").where("reconciliation.lease_token", "=", input.claim.leaseToken).where(liveLease(this.db)).where(this.statusOwnsRun(input.claim, input.targetEpoch)).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async findScanPage(reconciliation, limit) {
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1e3) throw new Error("Reconciliation scan page limit must be from 1 to 1000");
+		if (!reconciliation.leaseToken || reconciliation.targetEpoch === null) return [];
+		const tableName = contentTableName(reconciliation.collectionSlug);
+		const lowerBound = reconciliation.scanCursor ? sql`AND content.id > ${reconciliation.scanCursor}` : sql``;
+		const upperBound = reconciliation.scanUpperId ? sql`AND content.id <= ${reconciliation.scanUpperId}` : sql`AND 1 = 0`;
+		return (await sql`
+			SELECT content.id
+			FROM ${sql.ref(tableName)} AS content
+			WHERE 1 = 1
+				${lowerBound}
+				${upperBound}
+				AND ${this.liveClaimExistsSql(reconciliation)}
+			ORDER BY content.id ASC
+			LIMIT ${limit}
+		`.execute(this.db)).rows.map((row) => row.id);
+	}
+	async checkpointScan(input) {
+		let query = this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			scan_cursor: input.nextCursor,
+			attempt_count: 0,
+			last_error_code: null,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", input.claim.collectionId).where("reconciliation.run_token", "=", input.claim.runToken).where("reconciliation.target_epoch", "=", input.targetEpoch).where("reconciliation.state", "=", "leased").where("reconciliation.phase", "=", "scan").where("reconciliation.lease_token", "=", input.claim.leaseToken).where(liveLease(this.db)).where(this.statusOwnsRun(input.claim, input.targetEpoch));
+		query = input.previousCursor ? query.where("reconciliation.scan_cursor", "=", input.previousCursor) : query.where("reconciliation.scan_cursor", "is", null);
+		const result = await query.executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async ownsRun(claim, targetEpoch) {
+		const result = await sql`
+			SELECT ${this.statusOwnsRun(claim, targetEpoch)} AS owned
+		`.execute(this.db);
+		return Boolean(result.rows[0]?.owned);
+	}
+	async restartRun(claim, previousEpoch) {
+		const now = timestampOffset(this.db, 0);
+		const interruptedRestart = sql`status = 'running'
+			AND cursor = ${claim.runToken}
+			AND change_epoch > ${previousEpoch}`;
+		return (await this.db.updateTable("_emdash_media_usage_index_status as status").set({
+			status: "running",
+			started_at: sql`CASE WHEN ${interruptedRestart} THEN started_at ELSE ${now} END`,
+			completed_at: null,
+			cursor: claim.runToken,
+			last_error_code: null,
+			change_epoch: sql`CASE WHEN ${interruptedRestart} THEN change_epoch ELSE change_epoch + 1 END`,
+			reconciliation_required: 1,
+			updated_at: now
+		}).where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where("status.collection_id", "=", claim.collectionId).where("status.scope_key", "=", claim.collectionSlug).where("status.capture_state", "=", "active").where("status.reconciliation_required", "=", 1).where((eb) => eb.or([eb("status.status", "!=", "running"), eb("status.cursor", "=", claim.runToken)])).where(this.liveClaimExists(claim)).returning("change_epoch").executeTakeFirst())?.change_epoch ?? null;
+	}
+	async restartScan(input) {
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			target_epoch: input.targetEpoch,
+			field_fingerprint: input.fieldFingerprint,
+			phase: "scan",
+			scan_cursor: null,
+			scan_upper_id: input.scanUpperId,
+			source_cursor: null,
+			source_upper_key: null,
+			attempt_count: 0,
+			next_attempt_at: timestampOffset(this.db, 0),
+			last_error_code: null,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", input.claim.collectionId).where("reconciliation.run_token", "=", input.claim.runToken).where("reconciliation.target_epoch", "=", input.previousEpoch).where("reconciliation.state", "=", "leased").where("reconciliation.lease_token", "=", input.claim.leaseToken).where(liveLease(this.db)).where(this.statusOwnsRun(input.claim, input.targetEpoch)).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async findWorkBarrier(collectionId) {
+		if (!collectionId) throw new Error("Reconciliation work barrier requires a collection ID");
+		const failed = await this.db.selectFrom("_emdash_media_usage_work").select("last_error_code").where("collection_id", "=", collectionId).where("state", "=", "failed").orderBy("content_id").limit(1).executeTakeFirst();
+		if (failed) return {
+			state: "failed",
+			errorCode: failed.last_error_code ?? "MEDIA_USAGE_PROCESSING_FAILED"
+		};
+		return await this.db.selectFrom("_emdash_media_usage_work").select("content_id").where("collection_id", "=", collectionId).limit(1).executeTakeFirst() ? { state: "pending" } : { state: "empty" };
+	}
+	async findSourceUpperKey(claim, targetEpoch) {
+		return (await this.db.selectFrom("_emdash_media_usage_sources as source").select("source.source_key").where("source.source_type", "=", "content").where("source.collection_id", "=", claim.collectionId).where("source.identity_version", "=", 1).where(this.liveClaimExists(claim)).where(this.statusOwnsRun(claim, targetEpoch)).orderBy("source.source_key", "desc").limit(1).executeTakeFirst())?.source_key ?? null;
+	}
+	async transitionToSources(input) {
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			phase: "sources",
+			source_cursor: null,
+			source_upper_key: input.sourceUpperKey,
+			attempt_count: 0,
+			last_error_code: null,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", input.claim.collectionId).where("reconciliation.run_token", "=", input.claim.runToken).where("reconciliation.target_epoch", "=", input.targetEpoch).where("reconciliation.field_fingerprint", "=", input.fieldFingerprint).where("reconciliation.state", "=", "leased").where("reconciliation.phase", "=", "scan").where("reconciliation.lease_token", "=", input.claim.leaseToken).where(liveLease(this.db)).where(this.statusOwnsRun(input.claim, input.targetEpoch)).where((eb) => eb.not(eb.exists(eb.selectFrom("_emdash_media_usage_work as work").select("work.content_id").where("work.collection_id", "=", input.claim.collectionId)))).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async findSourcePage(reconciliation, limit) {
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1e3) throw new Error("Reconciliation source page limit must be from 1 to 1000");
+		if (!reconciliation.leaseToken || reconciliation.targetEpoch === null) return [];
+		let query = this.db.selectFrom("_emdash_media_usage_sources as source").select([
+			"source.source_key",
+			"source.content_id",
+			"source.source_variant"
+		]).where("source.source_type", "=", "content").where("source.collection_id", "=", reconciliation.collectionId).where("source.identity_version", "=", 1).where(this.liveClaimExists(reconciliation)).where(this.statusOwnsRun(reconciliation, reconciliation.targetEpoch));
+		if (reconciliation.sourceCursor) query = query.where("source.source_key", ">", reconciliation.sourceCursor);
+		if (reconciliation.sourceUpperKey) query = query.where("source.source_key", "<=", reconciliation.sourceUpperKey);
+		else query = query.where(sql`1 = 0`);
+		return (await query.orderBy("source.source_key").limit(limit).execute()).map((row) => ({
+			sourceKey: row.source_key,
+			contentId: row.content_id,
+			sourceVariant: row.source_variant
+		}));
+	}
+	async findMissingContentIds(collectionSlug, contentIds) {
+		const unique = [...new Set(contentIds)];
+		if (unique.length === 0) return [];
+		if (unique.length > 1e3 || unique.some((contentId) => !contentId)) throw new Error("Reconciliation source page has invalid content identity");
+		const tableName = contentTableName(collectionSlug);
+		const existing = await sql`
+			WITH requested AS (${jsonTextValues(this.db, unique)})
+			SELECT content.id
+			FROM ${sql.ref(tableName)} AS content
+			INNER JOIN requested ON requested.value = content.id
+		`.execute(this.db);
+		const present = new Set(existing.rows.map((row) => row.id));
+		return unique.filter((contentId) => !present.has(contentId));
+	}
+	async checkpointSources(input) {
+		let query = this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			source_cursor: input.nextCursor,
+			attempt_count: 0,
+			last_error_code: null,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", input.claim.collectionId).where("reconciliation.run_token", "=", input.claim.runToken).where("reconciliation.target_epoch", "=", input.targetEpoch).where("reconciliation.state", "=", "leased").where("reconciliation.phase", "=", "sources").where("reconciliation.lease_token", "=", input.claim.leaseToken).where(liveLease(this.db)).where(this.statusOwnsRun(input.claim, input.targetEpoch));
+		query = input.previousCursor ? query.where("reconciliation.source_cursor", "=", input.previousCursor) : query.where("reconciliation.source_cursor", "is", null);
+		const result = await query.executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async finishFailedCoverage(collectionId, runToken) {
+		assertIdentity({
+			collectionId,
+			runToken
+		});
+		const now = timestampOffset(this.db, 0);
+		const result = await this.db.updateTable("_emdash_media_usage_index_status as status").set({
+			status: sql`CASE WHEN EXISTS (
+					SELECT 1 FROM _emdash_media_usage_sources AS source
+					WHERE source.source_type = 'content'
+						AND source.collection_id = ${collectionId}
+						AND source.identity_version = 1
+					LIMIT 1
+				) THEN 'partial' ELSE 'failed' END`,
+			completed_at: null,
+			cursor: null,
+			last_error_code: sql`CASE WHEN (
+					SELECT reconciliation.last_error_code
+					FROM _emdash_media_usage_reconciliations AS reconciliation
+					WHERE reconciliation.collection_id = ${collectionId}
+						AND reconciliation.run_token = ${runToken}
+				) = 'MEDIA_USAGE_RECONCILIATION_ENTRY_FAILED'
+				THEN COALESCE(
+					(SELECT work.last_error_code
+					 FROM _emdash_media_usage_work AS work
+					 WHERE work.collection_id = ${collectionId} AND work.state = 'failed'
+					 ORDER BY work.content_id LIMIT 1),
+					'MEDIA_USAGE_RECONCILIATION_ENTRY_FAILED'
+				)
+				ELSE (
+					SELECT reconciliation.last_error_code
+					FROM _emdash_media_usage_reconciliations AS reconciliation
+					WHERE reconciliation.collection_id = ${collectionId}
+						AND reconciliation.run_token = ${runToken}
+				) END`,
+			reconciliation_required: 1,
+			updated_at: now
+		}).where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where("status.collection_id", "=", collectionId).where("status.status", "=", "running").where("status.cursor", "=", runToken).where(sql`status.change_epoch = (
+				SELECT reconciliation.target_epoch
+				FROM _emdash_media_usage_reconciliations AS reconciliation
+				WHERE reconciliation.collection_id = ${collectionId}
+					AND reconciliation.run_token = ${runToken}
+			)`).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_reconciliations as reconciliation").select("reconciliation.collection_id").where("reconciliation.collection_id", "=", collectionId).where("reconciliation.run_token", "=", runToken).where("reconciliation.state", "=", "failed"))).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async finalizeCoverage(input) {
+		const now = timestampOffset(this.db, 0);
+		const result = await this.db.updateTable("_emdash_media_usage_index_status as status").set({
+			status: "complete",
+			schema_version: input.schemaVersion,
+			completed_at: now,
+			cursor: null,
+			last_error_code: null,
+			reconciliation_required: 0,
+			updated_at: now
+		}).where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where("status.collection_id", "=", input.claim.collectionId).where("status.scope_key", "=", input.claim.collectionSlug).where("status.capture_state", "=", "active").where("status.reconciliation_required", "=", 1).where("status.status", "=", "running").where("status.cursor", "=", input.claim.runToken).where("status.change_epoch", "=", input.targetEpoch).where((eb) => eb.not(eb.exists(eb.selectFrom("_emdash_media_usage_work as work").select("work.content_id").where("work.collection_id", "=", input.claim.collectionId)))).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_reconciliations as reconciliation").innerJoin("_emdash_collections as collection", (join) => join.onRef("collection.id", "=", "reconciliation.collection_id").onRef("collection.slug", "=", "reconciliation.collection_slug")).select("reconciliation.collection_id").where("reconciliation.collection_id", "=", input.claim.collectionId).where("reconciliation.run_token", "=", input.claim.runToken).where("reconciliation.target_epoch", "=", input.targetEpoch).where("reconciliation.field_fingerprint", "=", input.fieldFingerprint).where("reconciliation.state", "=", "leased").where("reconciliation.phase", "=", "sources").where("reconciliation.lease_token", "=", input.claim.leaseToken).where(liveLease(this.db, "reconciliation.lease_expires_at")).where((inner) => inner.not(inner.exists(inner.selectFrom("_emdash_media_usage_collection_deletions as deletion").select("deletion.collection_id").where("deletion.collection_id", "=", input.claim.collectionId)))))).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_activation as activation").select("activation.task_key").where("activation.task_key", "=", ACTIVATION_KEY).where("activation.state", "=", "active"))).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async deleteFinalized(claim) {
+		const result = await this.db.deleteFrom("_emdash_media_usage_reconciliations as reconciliation").where("reconciliation.collection_id", "=", claim.collectionId).where("reconciliation.run_token", "=", claim.runToken).where("reconciliation.state", "=", "leased").where("reconciliation.lease_token", "=", claim.leaseToken).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_index_status as status").select("status.collection_id").where("status.collection_id", "=", claim.collectionId).where("status.scope_key", "=", claim.collectionSlug).where("status.status", "=", "complete").where("status.reconciliation_required", "=", 0))).executeTakeFirst();
+		return Number(result.numDeletedRows ?? 0) === 1;
+	}
+	async deleteOneObsolete() {
+		return (await sql`
+			DELETE FROM _emdash_media_usage_reconciliations
+			WHERE (collection_id, run_token) IN (
+				SELECT reconciliation.collection_id, reconciliation.run_token
+				FROM _emdash_media_usage_reconciliations AS reconciliation
+				INNER JOIN _emdash_media_usage_index_status AS status
+					ON status.collection_id = reconciliation.collection_id
+					AND status.scope_key = reconciliation.collection_slug
+				WHERE status.adapter_id = ${CONTENT_ADAPTER_ID}
+					AND status.scope_type = ${COLLECTION_SCOPE}
+					AND status.reconciliation_required = 0
+				ORDER BY reconciliation.updated_at, reconciliation.collection_id
+				LIMIT 1
+			)
+			RETURNING collection_id
+		`.execute(this.db)).rows.length === 1;
+	}
+	liveClaimExists(claim) {
+		return this.liveClaimExistsSql(claim);
+	}
+	liveClaimExistsSql(claim) {
+		return sql`EXISTS (
+			SELECT 1
+			FROM _emdash_media_usage_reconciliations AS reconciliation
+			INNER JOIN _emdash_collections AS collection
+				ON collection.id = reconciliation.collection_id
+				AND collection.slug = reconciliation.collection_slug
+			WHERE reconciliation.collection_id = ${claim.collectionId}
+				AND reconciliation.collection_slug = ${claim.collectionSlug}
+				AND reconciliation.run_token = ${claim.runToken}
+				AND reconciliation.state = 'leased'
+				AND reconciliation.lease_token = ${claim.leaseToken}
+				AND ${liveLease(this.db, "reconciliation.lease_expires_at")}
+				AND EXISTS (
+					SELECT 1 FROM _emdash_media_usage_activation AS activation
+					WHERE activation.task_key = ${ACTIVATION_KEY}
+						AND activation.state = 'active'
+				)
+				AND NOT EXISTS (
+					SELECT 1 FROM _emdash_media_usage_collection_deletions AS deletion
+					WHERE deletion.collection_id = reconciliation.collection_id
+				)
+		)`;
+	}
+	statusOwnsRun(claim, targetEpoch) {
+		return sql`EXISTS (
+			SELECT 1 FROM _emdash_media_usage_index_status AS status
+			WHERE status.adapter_id = ${CONTENT_ADAPTER_ID}
+				AND status.scope_type = ${COLLECTION_SCOPE}
+				AND status.collection_id = ${claim.collectionId}
+				AND status.scope_key = ${claim.collectionSlug}
+				AND status.capture_state = 'active'
+				AND status.reconciliation_required = 1
+				AND status.status = 'running'
+				AND status.cursor = ${claim.runToken}
+				AND status.change_epoch = ${targetEpoch}
+		)`;
+	}
+	async seedNextCandidate() {
+		const runToken = ulid();
+		const now = timestampOffset(this.db, 0);
+		return (await sql`
+			INSERT INTO _emdash_media_usage_reconciliations (
+				collection_id,
+				collection_slug,
+				run_token,
+				next_attempt_at,
+				updated_at
+			)
+			SELECT status.collection_id, status.scope_key, ${runToken}, ${now}, ${now}
+			FROM _emdash_media_usage_index_status AS status
+			INNER JOIN _emdash_collections AS collection
+				ON collection.id = status.collection_id
+				AND collection.slug = status.scope_key
+			WHERE status.adapter_id = ${CONTENT_ADAPTER_ID}
+				AND status.scope_type = ${COLLECTION_SCOPE}
+				AND status.capture_state = 'active'
+				AND status.reconciliation_required = 1
+				AND status.collection_id IS NOT NULL
+				AND EXISTS (
+					SELECT 1 FROM _emdash_media_usage_activation AS activation
+					WHERE activation.task_key = ${ACTIVATION_KEY}
+						AND activation.state = 'active'
+				)
+				AND NOT EXISTS (
+					SELECT 1 FROM _emdash_media_usage_reconciliations AS existing
+					WHERE existing.collection_id = status.collection_id
+				)
+				AND NOT EXISTS (
+					SELECT 1 FROM _emdash_media_usage_collection_deletions AS deletion
+					WHERE deletion.collection_id = status.collection_id
+				)
+			ORDER BY status.collection_id
+			LIMIT 1
+			ON CONFLICT (collection_id) DO NOTHING
+			RETURNING collection_id
+		`.execute(this.db)).rows.length === 1;
+	}
+	async findDue(limit) {
+		assertLimit(limit);
+		const nextAttemptIsDue = timestampIsDue(this.db, "next_attempt_at");
+		return (await sql`
+			WITH pending_candidates AS (
+				SELECT * FROM _emdash_media_usage_reconciliations
+				WHERE state = 'pending' AND ${nextAttemptIsDue}
+				ORDER BY next_attempt_at, updated_at, collection_id
+				LIMIT ${limit}
+			), retry_candidates AS (
+				SELECT * FROM _emdash_media_usage_reconciliations
+				WHERE state = 'retry' AND ${nextAttemptIsDue}
+				ORDER BY next_attempt_at, updated_at, collection_id
+				LIMIT ${limit}
+			), leased_candidates AS (
+				SELECT * FROM _emdash_media_usage_reconciliations
+				WHERE state = 'leased' AND ${timestampIsDue(this.db, "lease_expires_at")}
+				ORDER BY lease_expires_at, updated_at, collection_id
+				LIMIT ${limit}
+			), candidates AS (
+				SELECT * FROM pending_candidates
+				UNION ALL SELECT * FROM retry_candidates
+				UNION ALL SELECT * FROM leased_candidates
+			)
+			SELECT * FROM candidates
+			ORDER BY CASE WHEN state = 'leased' THEN lease_expires_at ELSE next_attempt_at END,
+				updated_at,
+				collection_id
+			LIMIT ${limit}
+		`.execute(this.db)).rows.map(rowToRecord);
+	}
+	async hasDeferredCandidate() {
+		return await this.db.selectFrom("_emdash_media_usage_reconciliations").select("collection_id").where("state", "in", [
+			"pending",
+			"retry",
+			"leased"
+		]).limit(1).executeTakeFirst() !== void 0;
+	}
+	async wakeDrainedBarrierCandidate() {
+		const now = timestampOffset(this.db, 0);
+		return (await sql`
+			UPDATE _emdash_media_usage_reconciliations
+			SET next_attempt_at = ${now}, updated_at = ${now}
+			WHERE collection_id = (
+				SELECT reconciliation.collection_id
+				FROM _emdash_media_usage_reconciliations AS reconciliation
+				INNER JOIN _emdash_media_usage_index_status AS status
+					ON status.collection_id = reconciliation.collection_id
+					AND status.scope_key = reconciliation.collection_slug
+				WHERE reconciliation.state = 'pending'
+					AND reconciliation.target_epoch IS NOT NULL
+					AND NOT ${timestampIsDue(this.db, "reconciliation.next_attempt_at")}
+					AND status.adapter_id = ${CONTENT_ADAPTER_ID}
+					AND status.scope_type = ${COLLECTION_SCOPE}
+					AND status.capture_state = 'active'
+					AND status.reconciliation_required = 1
+					AND status.status = 'running'
+					AND status.cursor = reconciliation.run_token
+					AND status.change_epoch = reconciliation.target_epoch
+					AND NOT EXISTS (
+						SELECT 1 FROM _emdash_media_usage_work AS work
+						WHERE work.collection_id = reconciliation.collection_id
+					)
+					AND NOT EXISTS (
+						SELECT 1 FROM _emdash_media_usage_collection_deletions AS deletion
+						WHERE deletion.collection_id = reconciliation.collection_id
+					)
+				ORDER BY reconciliation.next_attempt_at, reconciliation.updated_at,
+					reconciliation.collection_id
+				LIMIT 1
+			)
+			AND state = 'pending'
+			AND NOT ${timestampIsDue(this.db, "_emdash_media_usage_reconciliations.next_attempt_at")}
+			AND EXISTS (
+				SELECT 1 FROM _emdash_media_usage_activation AS activation
+				WHERE activation.task_key = ${ACTIVATION_KEY}
+					AND activation.state = 'active'
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM _emdash_media_usage_work AS work
+				WHERE work.collection_id = _emdash_media_usage_reconciliations.collection_id
+			)
+			RETURNING collection_id
+		`.execute(this.db)).rows.length === 1;
+	}
+	async findFailed(limit) {
+		assertLimit(limit);
+		return (await this.db.selectFrom("_emdash_media_usage_reconciliations as reconciliation").innerJoin("_emdash_media_usage_index_status as status", (join) => join.onRef("status.collection_id", "=", "reconciliation.collection_id").onRef("status.scope_key", "=", "reconciliation.collection_slug")).selectAll("reconciliation").where("reconciliation.state", "=", "failed").where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where((eb) => eb.or([
+			eb("status.reconciliation_required", "=", 0),
+			eb.and([eb("status.status", "=", "running"), eb("status.cursor", "=", eb.ref("reconciliation.run_token"))]),
+			eb.and([eb("status.cursor", "is", null), eb("status.change_epoch", ">", eb.ref("reconciliation.target_epoch"))])
+		])).orderBy("reconciliation.updated_at").orderBy("reconciliation.collection_id").limit(limit).execute()).map(rowToRecord);
+	}
+	async claim(input) {
+		assertIdentity(input);
+		assertDuration(input.leaseDurationSeconds, "lease duration");
+		const leaseToken = ulid();
+		const row = await this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			state: "leased",
+			lease_token: leaseToken,
+			lease_expires_at: timestampOffset(this.db, input.leaseDurationSeconds),
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", input.collectionId).where("reconciliation.run_token", "=", input.runToken).where((eb) => eb.or([eb.and([eb("reconciliation.state", "in", ["pending", "retry"]), timestampIsDue(this.db, "reconciliation.next_attempt_at")]), eb.and([eb("reconciliation.state", "=", "leased"), timestampIsDue(this.db, "reconciliation.lease_expires_at")])])).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_activation as activation").select("activation.task_key").where("activation.task_key", "=", ACTIVATION_KEY).where("activation.state", "=", "active"))).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_index_status as status").innerJoin("_emdash_collections as collection", (join) => join.onRef("collection.id", "=", "status.collection_id").onRef("collection.slug", "=", "status.scope_key")).select("status.collection_id").whereRef("status.collection_id", "=", "reconciliation.collection_id").whereRef("status.scope_key", "=", "reconciliation.collection_slug").where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where("status.capture_state", "=", "active").where("status.reconciliation_required", "=", 1))).where((eb) => eb.not(eb.exists(eb.selectFrom("_emdash_media_usage_collection_deletions as deletion").select("deletion.collection_id").whereRef("deletion.collection_id", "=", "reconciliation.collection_id")))).returningAll().executeTakeFirst();
+		return row ? {
+			...rowToRecord(row),
+			leaseToken
+		} : null;
+	}
+	async release(input) {
+		assertLeaseIdentity(input);
+		assertDuration(input.delaySeconds, "release delay", true);
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations").set({
+			state: "pending",
+			next_attempt_at: timestampOffset(this.db, input.delaySeconds),
+			lease_token: null,
+			lease_expires_at: null,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("collection_id", "=", input.collectionId).where("run_token", "=", input.runToken).where("state", "=", "leased").where("lease_token", "=", input.leaseToken).where(liveLease(this.db)).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async recordFailure(input) {
+		assertLeaseIdentity(input);
+		if (!STABLE_ERROR_CODE_PATTERN.test(input.errorCode)) throw new Error("Reconciliation failure requires a stable error code");
+		assertDuration(input.retryDelaySeconds, "retry delay", true);
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations").set({
+			state: input.terminal ? "failed" : sql`CASE WHEN attempt_count >= 4 THEN 'failed' ELSE 'retry' END`,
+			...input.terminal ? { target_epoch: sql`COALESCE(
+								target_epoch,
+								(SELECT status.change_epoch
+								 FROM _emdash_media_usage_index_status AS status
+								 WHERE status.adapter_id = ${CONTENT_ADAPTER_ID}
+									AND status.scope_type = ${COLLECTION_SCOPE}
+									AND status.collection_id = ${input.collectionId}
+									AND status.status = 'running'
+									AND status.cursor = ${input.runToken})
+							)` } : {},
+			attempt_count: sql`attempt_count + 1`,
+			next_attempt_at: timestampOffset(this.db, input.retryDelaySeconds),
+			lease_token: null,
+			lease_expires_at: null,
+			last_error_code: input.errorCode,
+			updated_at: timestampOffset(this.db, 0)
+		}).where("collection_id", "=", input.collectionId).where("run_token", "=", input.runToken).where("state", "=", "leased").where("lease_token", "=", input.leaseToken).where(liveLease(this.db)).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async recordEntryFailure(claim) {
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			state: "failed",
+			attempt_count: sql`attempt_count + 1`,
+			next_attempt_at: timestampOffset(this.db, 0),
+			lease_token: null,
+			lease_expires_at: null,
+			last_error_code: "MEDIA_USAGE_RECONCILIATION_ENTRY_FAILED",
+			updated_at: timestampOffset(this.db, 0)
+		}).where("reconciliation.collection_id", "=", claim.collectionId).where("reconciliation.run_token", "=", claim.runToken).where("reconciliation.state", "=", "leased").where("reconciliation.lease_token", "=", claim.leaseToken).where(liveLease(this.db)).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_work as work").select("work.content_id").where("work.collection_id", "=", claim.collectionId).where("work.state", "=", "failed"))).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+	async resetFailedForNewEpoch(observed) {
+		const collectionId = "collection_id" in observed ? observed.collection_id : observed.collectionId;
+		const runToken = "run_token" in observed ? observed.run_token : observed.runToken;
+		const targetEpoch = "target_epoch" in observed ? observed.target_epoch : observed.targetEpoch;
+		if (targetEpoch === null) return false;
+		const now = timestampOffset(this.db, 0);
+		const result = await this.db.updateTable("_emdash_media_usage_reconciliations as reconciliation").set({
+			state: "pending",
+			phase: "scan",
+			target_epoch: null,
+			field_fingerprint: null,
+			scan_cursor: null,
+			scan_upper_id: null,
+			source_cursor: null,
+			source_upper_key: null,
+			attempt_count: 0,
+			next_attempt_at: now,
+			lease_token: null,
+			lease_expires_at: null,
+			last_error_code: null,
+			updated_at: now
+		}).where("reconciliation.collection_id", "=", collectionId).where("reconciliation.run_token", "=", runToken).where("reconciliation.state", "=", "failed").where("reconciliation.target_epoch", "=", targetEpoch).where((eb) => eb.exists(eb.selectFrom("_emdash_media_usage_index_status as status").select("status.collection_id").whereRef("status.collection_id", "=", "reconciliation.collection_id").whereRef("status.scope_key", "=", "reconciliation.collection_slug").where("status.adapter_id", "=", CONTENT_ADAPTER_ID).where("status.scope_type", "=", COLLECTION_SCOPE).where("status.capture_state", "=", "active").where("status.reconciliation_required", "=", 1).where((status) => status.or([status("status.cursor", "is", null), status.and([status("status.status", "=", "running"), status("status.cursor", "=", runToken)])])).where("status.change_epoch", ">", targetEpoch))).executeTakeFirst();
+		return Number(result.numUpdatedRows ?? 0) === 1;
+	}
+};
+function rowToRecord(row) {
+	if (!isState(row.state) || !isPhase(row.phase) || !Number.isSafeInteger(row.attempt_count)) throw new Error("Invalid media usage reconciliation lifecycle");
+	return {
+		collectionId: row.collection_id,
+		collectionSlug: row.collection_slug,
+		runToken: row.run_token,
+		targetEpoch: row.target_epoch,
+		fieldFingerprint: row.field_fingerprint,
+		state: row.state,
+		phase: row.phase,
+		scanCursor: row.scan_cursor,
+		scanUpperId: row.scan_upper_id,
+		sourceCursor: row.source_cursor,
+		sourceUpperKey: row.source_upper_key,
+		attemptCount: row.attempt_count,
+		nextAttemptAt: row.next_attempt_at,
+		leaseToken: row.lease_token,
+		leaseExpiresAt: row.lease_expires_at,
+		lastErrorCode: row.last_error_code,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at
+	};
+}
+function isState(state) {
+	return state === "pending" || state === "retry" || state === "leased" || state === "failed";
+}
+function isPhase(phase) {
+	return phase === "scan" || phase === "sources";
+}
+function assertLimit(limit) {
+	if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_CANDIDATES) throw new Error("Reconciliation candidate limit must be from 1 to 100");
+}
+function assertIdentity(input) {
+	if (!input.collectionId || !input.runToken) throw new Error("Reconciliation requires an exact collection and run token");
+}
+function assertLeaseIdentity(input) {
+	assertIdentity(input);
+	if (!input.leaseToken) throw new Error("Reconciliation requires a lease token");
+}
+function assertDuration(value, label, allowZero = false) {
+	if (!Number.isSafeInteger(value) || value < (allowZero ? 0 : 1) || value > MAX_PORTABLE_DURATION_SECONDS) throw new Error(`Reconciliation ${label} is outside the portable range`);
+}
+function liveLease(db, column = "lease_expires_at") {
+	const expiry = sql.ref(column);
+	return isPostgres(db) ? sql`${expiry} > to_char(statement_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` : sql`${expiry} > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+}
+function timestampIsDue(db, column) {
+	const value = sql.ref(column);
+	return isPostgres(db) ? sql`${value} <= to_char(statement_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` : sql`${value} <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+}
+function timestampOffset(db, offsetSeconds) {
+	if (isPostgres(db)) return sql`to_char(
+			(clock_timestamp() AT TIME ZONE 'UTC') + (${offsetSeconds} * INTERVAL '1 second'),
+			'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+		)`;
+	return sql`strftime(
+		'%Y-%m-%dT%H:%M:%fZ',
+		'now',
+		${`${offsetSeconds >= 0 ? "+" : ""}${offsetSeconds} seconds`}
+	)`;
+}
+function contentTableName(collectionSlug) {
+	validateIdentifier(collectionSlug, "collection slug");
+	const tableName = `ec_${collectionSlug}`;
+	validateIdentifier(tableName, "content table");
+	return tableName;
+}
+
+//#endregion
+//#region src/media/usage/reconciliation-processor.ts
+const MEDIA_USAGE_RECONCILIATION_LIMITS = Object.freeze({
+	candidatesPerTick: 4,
+	scanPageSize: 1e3,
+	sourcePageSize: 1e3,
+	leaseDurationSeconds: 60,
+	maxAttempts: 5,
+	retryBaseSeconds: 30,
+	retryMaxSeconds: 900,
+	retryJitterRatio: .25
+});
+async function processDueMediaUsageReconciliationDetailed(db, options = {}) {
+	if (!options.activationKnownActive) {
+		if ((await db.selectFrom("_emdash_media_usage_activation").select("state").where("task_key", "=", "incremental_capture").executeTakeFirst())?.state !== "active") return {
+			outcome: "inactive",
+			consumedUnit: false,
+			hasDeferredCandidate: false
+		};
+	}
+	const reconciliation = new MediaUsageReconciliationRepository(db);
+	if (await reconciliation.deleteOneObsolete()) return {
+		outcome: "completed",
+		consumedUnit: true,
+		hasDeferredCandidate: false
+	};
+	const [failed] = await reconciliation.findFailed(1);
+	if (failed) {
+		if (await reconciliation.finishFailedCoverage(failed.collectionId, failed.runToken)) return {
+			outcome: "failed",
+			consumedUnit: true,
+			hasDeferredCandidate: false
+		};
+		if (await reconciliation.resetFailedForNewEpoch(failed)) return {
+			outcome: "advanced",
+			consumedUnit: true,
+			hasDeferredCandidate: false
+		};
+	}
+	const seeded = await reconciliation.seedNextCandidate();
+	const candidates = await reconciliation.findDue(MEDIA_USAGE_RECONCILIATION_LIMITS.candidatesPerTick);
+	let claim = null;
+	for (const candidate of candidates) {
+		claim = await reconciliation.claim({
+			collectionId: candidate.collectionId,
+			runToken: candidate.runToken,
+			leaseDurationSeconds: MEDIA_USAGE_RECONCILIATION_LIMITS.leaseDurationSeconds
+		});
+		if (claim) break;
+	}
+	if (!claim) return {
+		outcome: candidates.length === 0 ? "not_due" : "claim_lost",
+		consumedUnit: seeded,
+		hasDeferredCandidate: candidates.length === 0 && await reconciliation.hasDeferredCandidate()
+	};
+	try {
+		return {
+			outcome: await processClaimedReconciliation(db, claim),
+			consumedUnit: true,
+			hasDeferredCandidate: false
+		};
+	} catch (error) {
+		const terminal = claim.attemptCount + 1 >= MEDIA_USAGE_RECONCILIATION_LIMITS.maxAttempts;
+		if (!await reconciliation.recordFailure({
+			collectionId: claim.collectionId,
+			runToken: claim.runToken,
+			leaseToken: claim.leaseToken,
+			errorCode: "MEDIA_USAGE_RECONCILIATION_FAILED",
+			retryDelaySeconds: retryDelaySeconds$1(claim.attemptCount),
+			terminal
+		})) return {
+			outcome: "claim_lost",
+			consumedUnit: true,
+			hasDeferredCandidate: false
+		};
+		if (terminal) await reconciliation.finishFailedCoverage(claim.collectionId, claim.runToken);
+		console.error("[media-usage:reconciliation] Processing failed:", error);
+		return {
+			outcome: terminal ? "failed" : "retry",
+			consumedUnit: true,
+			hasDeferredCandidate: false
+		};
+	}
+}
+async function processClaimedMediaUsageReconciliationScan(db, claim, options = {}, knownCurrent) {
+	const reconciliation = new MediaUsageReconciliationRepository(db);
+	let current = knownCurrent ?? await reconciliation.findByIdentity(claim.collectionId, claim.runToken);
+	if (!current || current.leaseToken !== claim.leaseToken || current.phase !== "scan") return "deferred";
+	let fields;
+	let fieldFingerprint;
+	if (current.targetEpoch === null) {
+		const targetEpoch = await reconciliation.beginRun(claim);
+		if (targetEpoch === null) {
+			await reconciliation.release({
+				...claim,
+				delaySeconds: 30
+			});
+			return "deferred";
+		}
+		fields = await loadContentMediaUsageFields(db, claim.collectionSlug, claim.collectionId);
+		fieldFingerprint = await buildContentMediaUsageFieldFingerprint(fields);
+		const scanUpperId = fields.extractionFields.length === 0 ? null : await reconciliation.findScanUpperId(claim);
+		if (!await reconciliation.initializeScan({
+			claim,
+			targetEpoch,
+			fieldFingerprint,
+			scanUpperId
+		})) return "deferred";
+		current = {
+			...current,
+			targetEpoch,
+			fieldFingerprint,
+			scanCursor: null,
+			scanUpperId,
+			sourceCursor: null,
+			sourceUpperKey: null
+		};
+	} else {
+		fields = await loadContentMediaUsageFields(db, claim.collectionSlug, claim.collectionId);
+		fieldFingerprint = await buildContentMediaUsageFieldFingerprint(fields);
+	}
+	if (current.fieldFingerprint !== fieldFingerprint || current.targetEpoch === null) return "restart_required";
+	const contentIds = await reconciliation.findScanPage(current, MEDIA_USAGE_RECONCILIATION_LIMITS.scanPageSize);
+	if (contentIds.length === 0) {
+		if (options.releaseOnExhausted ?? true) await reconciliation.release({
+			...claim,
+			delaySeconds: 30
+		});
+		return "exhausted";
+	}
+	await new MediaUsageWorkRepository(db).enqueueReconciliationPage({
+		collectionId: claim.collectionId,
+		collectionSlug: claim.collectionSlug,
+		runToken: claim.runToken,
+		leaseToken: claim.leaseToken,
+		changeEpoch: current.targetEpoch,
+		phase: "scan",
+		contentIds
+	});
+	const nextCursor = contentIds.at(-1);
+	if (!await reconciliation.checkpointScan({
+		claim,
+		targetEpoch: current.targetEpoch,
+		previousCursor: current.scanCursor,
+		nextCursor
+	})) return "deferred";
+	if (!await reconciliation.release({
+		...claim,
+		delaySeconds: 0
+	})) return "deferred";
+	return "advanced";
+}
+async function processClaimedReconciliation(db, claim) {
+	const reconciliation = new MediaUsageReconciliationRepository(db);
+	let current = claim;
+	if (current.targetEpoch !== null && !await reconciliation.ownsRun(claim, current.targetEpoch)) return restartReconciliation(db, reconciliation, claim, current);
+	if (current.targetEpoch !== null) await new MediaUsageWorkRepository(db).deleteObsoleteReconciliationWork({
+		collectionId: claim.collectionId,
+		collectionSlug: claim.collectionSlug,
+		runToken: claim.runToken,
+		leaseToken: claim.leaseToken,
+		targetEpoch: current.targetEpoch
+	});
+	if (current.phase === "scan") {
+		const outcome = await processClaimedMediaUsageReconciliationScan(db, claim, { releaseOnExhausted: false }, current);
+		if (outcome === "restart_required") {
+			current = await reconciliation.findByIdentity(claim.collectionId, claim.runToken) ?? current;
+			return restartReconciliation(db, reconciliation, claim, current);
+		}
+		if (outcome !== "exhausted") return outcome;
+		if (current.targetEpoch === null || current.fieldFingerprint === null) current = await reconciliation.findByIdentity(claim.collectionId, claim.runToken) ?? current;
+		const barrier = await reconciliation.findWorkBarrier(claim.collectionId);
+		if (barrier.state === "failed") return failReconciliation(reconciliation, claim, barrier.errorCode, true);
+		if (barrier.state === "pending") {
+			await reconciliation.release({
+				...claim,
+				delaySeconds: 30
+			});
+			return "deferred";
+		}
+		if (current.targetEpoch === null || current.fieldFingerprint === null) return "claim_lost";
+		const sourceUpperKey = await reconciliation.findSourceUpperKey(claim, current.targetEpoch);
+		if (!await reconciliation.transitionToSources({
+			claim,
+			targetEpoch: current.targetEpoch,
+			fieldFingerprint: current.fieldFingerprint,
+			sourceUpperKey
+		})) return "claim_lost";
+		if (!await reconciliation.release({
+			...claim,
+			delaySeconds: 0
+		})) return "claim_lost";
+		return "advanced";
+	}
+	return processSourcePhase(db, reconciliation, claim, current);
+}
+async function processSourcePhase(db, reconciliation, claim, current) {
+	if (current.targetEpoch === null || current.fieldFingerprint === null) return "claim_lost";
+	const fields = await loadContentMediaUsageFields(db, claim.collectionSlug, claim.collectionId);
+	const fieldFingerprint = await buildContentMediaUsageFieldFingerprint(fields);
+	if (fieldFingerprint !== current.fieldFingerprint) return restartReconciliation(db, reconciliation, claim, current, fields, fieldFingerprint);
+	const page = await reconciliation.findSourcePage(current, MEDIA_USAGE_RECONCILIATION_LIMITS.sourcePageSize);
+	if (page.length > 0) {
+		let enqueuedMissingContent = false;
+		if (page.some((source) => !source.contentId || source.sourceVariant !== "columns" && source.sourceVariant !== "draft_overlay")) return failReconciliation(reconciliation, claim, "MEDIA_USAGE_RECONCILIATION_INVALID_SOURCE", false);
+		const contentIds = [...new Set(page.map((source) => source.contentId))];
+		const enqueueIds = fields.extractionFields.length === 0 ? contentIds : await reconciliation.findMissingContentIds(claim.collectionSlug, contentIds);
+		if (enqueueIds.length > 0) {
+			await new MediaUsageWorkRepository(db).enqueueReconciliationPage({
+				collectionId: claim.collectionId,
+				collectionSlug: claim.collectionSlug,
+				runToken: claim.runToken,
+				leaseToken: claim.leaseToken,
+				changeEpoch: current.targetEpoch,
+				phase: "sources",
+				contentIds: enqueueIds
+			});
+			enqueuedMissingContent = true;
+		}
+		if (!await reconciliation.checkpointSources({
+			claim,
+			targetEpoch: current.targetEpoch,
+			previousCursor: current.sourceCursor,
+			nextCursor: page.at(-1).sourceKey
+		})) return "claim_lost";
+		if (enqueuedMissingContent || page.length === MEDIA_USAGE_RECONCILIATION_LIMITS.sourcePageSize) {
+			if (!await reconciliation.release({
+				...claim,
+				delaySeconds: 0
+			})) return "claim_lost";
+			return "advanced";
+		}
+	}
+	const barrier = await reconciliation.findWorkBarrier(claim.collectionId);
+	if (barrier.state === "failed") return failReconciliation(reconciliation, claim, barrier.errorCode, true);
+	if (barrier.state === "pending") {
+		await reconciliation.release({
+			...claim,
+			delaySeconds: 30
+		});
+		return "deferred";
+	}
+	if (!await reconciliation.finalizeCoverage({
+		claim,
+		targetEpoch: current.targetEpoch,
+		fieldFingerprint,
+		schemaVersion: CONTENT_SOURCE_SCHEMA_VERSION
+	})) return "claim_lost";
+	if (!await reconciliation.deleteFinalized(claim)) return "claim_lost";
+	return "completed";
+}
+async function restartReconciliation(db, reconciliation, claim, current, fields, fieldFingerprint) {
+	if (current.targetEpoch === null) return "claim_lost";
+	const discoveredFields = fields ?? await loadContentMediaUsageFields(db, claim.collectionSlug, claim.collectionId);
+	const fingerprint = fieldFingerprint ?? await buildContentMediaUsageFieldFingerprint(discoveredFields);
+	const targetEpoch = await reconciliation.restartRun(claim, current.targetEpoch);
+	if (targetEpoch === null) {
+		await reconciliation.release({
+			...claim,
+			delaySeconds: 30
+		});
+		return "deferred";
+	}
+	const scanUpperId = discoveredFields.extractionFields.length === 0 ? null : await reconciliation.findScanUpperId(claim);
+	if (!await reconciliation.restartScan({
+		claim,
+		previousEpoch: current.targetEpoch,
+		targetEpoch,
+		fieldFingerprint: fingerprint,
+		scanUpperId
+	})) return "claim_lost";
+	if (!await reconciliation.release({
+		...claim,
+		delaySeconds: 0
+	})) return "claim_lost";
+	return "advanced";
+}
+async function failReconciliation(reconciliation, claim, errorCode, entryFailure) {
+	if (!(entryFailure ? await reconciliation.recordEntryFailure(claim) : await reconciliation.recordFailure({
+		collectionId: claim.collectionId,
+		runToken: claim.runToken,
+		leaseToken: claim.leaseToken,
+		errorCode,
+		retryDelaySeconds: 0,
+		terminal: true
+	}))) return "claim_lost";
+	await reconciliation.finishFailedCoverage(claim.collectionId, claim.runToken);
+	return "failed";
+}
+function retryDelaySeconds$1(attemptCount) {
+	const exponential = Math.min(MEDIA_USAGE_RECONCILIATION_LIMITS.retryMaxSeconds, MEDIA_USAGE_RECONCILIATION_LIMITS.retryBaseSeconds * 2 ** attemptCount);
+	const jitter = Math.floor(exponential * MEDIA_USAGE_RECONCILIATION_LIMITS.retryJitterRatio * Math.random());
+	return Math.min(MEDIA_USAGE_RECONCILIATION_LIMITS.retryMaxSeconds, exponential + jitter);
+}
+
+//#endregion
+//#region src/media/usage/work-processor.ts
+const MEDIA_USAGE_WORK_PROCESSING_LIMITS = Object.freeze({
+	candidatesPerTick: 1e3,
+	leaseDurationSeconds: 1200,
+	maxAttempts: 5,
+	retryBaseSeconds: 30,
+	retryMaxSeconds: 900,
+	retryJitterRatio: .25
+});
+async function processMediaUsageWorkAfterWrite(db, collectionSlug, contentId) {
+	if (!await isIncrementalCaptureActive(db)) return {
+		outcome: "inactive",
+		claimed: false
+	};
+	await new MediaUsageRepository(db).recoverIncrementalFinalizations();
+	const repo = new MediaUsageWorkRepository(db);
+	const work = await repo.findWorkForContent(collectionSlug, contentId);
+	if (!work) return {
+		outcome: "not_due",
+		claimed: false
+	};
+	const claimed = await repo.claimWork({
+		collectionId: work.collectionId,
+		contentId: work.contentId,
+		workVersion: work.workVersion,
+		leaseDurationSeconds: MEDIA_USAGE_WORK_PROCESSING_LIMITS.leaseDurationSeconds
+	});
+	if (!claimed) return {
+		outcome: "claim_lost",
+		claimed: false
+	};
+	try {
+		return (await runClaimedBatch(db, [claimed])).get(workResultKey(claimed)) ?? {
+			outcome: "claim_lost",
+			claimed: false
+		};
+	} catch (error) {
+		const outcome = (await repo.retryClaimedWorkBatch({
+			work: [workLease(claimed)],
+			errorCode: "MEDIA_USAGE_PROCESSING_FAILED",
+			retryDelaySeconds: MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryBaseSeconds,
+			maxAttempts: MEDIA_USAGE_WORK_PROCESSING_LIMITS.maxAttempts
+		})).get(workIdentityKey(claimed)) ?? "superseded";
+		if (outcome === "failed") await new MediaUsageRepository(db).recordIncrementalFailure({
+			collectionId: claimed.collectionId,
+			collectionSlug: claimed.collectionSlug,
+			contentId: claimed.contentId,
+			workVersion: claimed.workVersion,
+			errorCode: "MEDIA_USAGE_PROCESSING_FAILED"
+		});
+		console.error("[media-usage:work] Immediate processing failed:", error);
+		return {
+			outcome,
+			claimed: true
+		};
+	}
+}
+async function processDueMediaUsageWork(db, options = {}) {
+	const startedAt = Date.now();
+	const result = {
+		candidateCount: 0,
+		claimedCount: 0,
+		completedCount: 0,
+		retryCount: 0,
+		failedCount: 0,
+		supersededCount: 0,
+		obsoleteCount: 0,
+		durationMs: 0
+	};
+	if (!options.activationKnownActive && !await isIncrementalCaptureActive(db)) {
+		result.durationMs = Date.now() - startedAt;
+		return result;
+	}
+	await new MediaUsageRepository(db).recoverIncrementalFinalizations();
+	const repo = new MediaUsageWorkRepository(db);
+	const candidates = await repo.claimDueWorkBatch({
+		limit: MEDIA_USAGE_WORK_PROCESSING_LIMITS.candidatesPerTick,
+		leaseDurationSeconds: MEDIA_USAGE_WORK_PROCESSING_LIMITS.leaseDurationSeconds
+	});
+	result.candidateCount = candidates.length > 0 || !await repo.hasNonterminalWork() ? candidates.length : 1;
+	const processedBatch = await processClaimedCollections(db, candidates);
+	for (const candidate of candidates) {
+		const processed = processedBatch.get(workResultKey(candidate)) ?? {
+			outcome: "claim_lost",
+			claimed: false
+		};
+		if (processed.claimed) result.claimedCount++;
+		if (processed.outcome === "completed") result.completedCount++;
+		if (processed.outcome === "retry") result.retryCount++;
+		if (processed.outcome === "failed") result.failedCount++;
+		if (processed.outcome === "superseded") result.supersededCount++;
+		if (processed.outcome === "obsolete") result.obsoleteCount++;
+	}
+	result.durationMs = Date.now() - startedAt;
+	return result;
+}
+async function processClaimedCollections(db, candidates) {
+	const processed = /* @__PURE__ */ new Map();
+	const byCollection = /* @__PURE__ */ new Map();
+	for (const candidate of candidates) {
+		const key = collectionResultKey(candidate);
+		const collection = byCollection.get(key) ?? [];
+		collection.push(candidate);
+		byCollection.set(key, collection);
+	}
+	for (const collection of byCollection.values()) try {
+		for (const [key, result] of await runClaimedBatch(db, collection)) processed.set(key, result);
+	} catch (error) {
+		for (const [key, result] of await retryFailedClaimedCollection(db, collection)) processed.set(key, result);
+		console.error("[media-usage:work] Collection processing failed:", error);
+	}
+	return processed;
+}
+async function retryFailedClaimedCollection(db, candidates) {
+	const transitioned = await new MediaUsageWorkRepository(db).retryClaimedWorkBatch({
+		work: candidates.map(workLease),
+		errorCode: "MEDIA_USAGE_PROCESSING_FAILED",
+		retryDelaySeconds: MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryBaseSeconds,
+		maxAttempts: MEDIA_USAGE_WORK_PROCESSING_LIMITS.maxAttempts
+	});
+	const processed = /* @__PURE__ */ new Map();
+	const failedCollectionIds = /* @__PURE__ */ new Set();
+	for (const candidate of candidates) {
+		const state = transitioned.get(workIdentityKey(candidate));
+		if (state === "failed") failedCollectionIds.add(candidate.collectionId);
+		processed.set(workResultKey(candidate), {
+			outcome: state ?? "superseded",
+			claimed: true
+		});
+	}
+	await new MediaUsageRepository(db).recordIncrementalFailuresByCollection({
+		collectionIds: [...failedCollectionIds],
+		errorCode: "MEDIA_USAGE_PROCESSING_FAILED"
+	});
+	return processed;
+}
+async function runClaimedBatch(db, candidates) {
+	return isPostgres(db) ? withTransaction(db, (trx) => processClaimedBatch(trx, new MediaUsageWorkRepository(trx), candidates)) : processClaimedBatch(db, new MediaUsageWorkRepository(db), candidates);
+}
+async function processClaimedBatch(db, repo, candidates) {
+	const results = /* @__PURE__ */ new Map();
+	const locked = await repo.lockClaimedWorkBatch(candidates.map(workLease));
+	const owned = [];
+	for (const candidate of candidates) if (locked.has(workIdentityKey(candidate))) owned.push(candidate);
+	else results.set(workResultKey(candidate), {
+		outcome: "superseded",
+		claimed: true
+	});
+	const currentCollections = await findCurrentCollectionIdentities(db, owned);
+	const current = [];
+	const obsolete = [];
+	for (const candidate of owned) if (currentCollections.has(collectionResultKey(candidate))) current.push(candidate);
+	else obsolete.push(candidate);
+	const obsoleteCompleted = await repo.completeWorkBatch(obsolete.map(workLease));
+	for (const candidate of obsolete) results.set(workResultKey(candidate), {
+		outcome: obsoleteCompleted.has(workIdentityKey(candidate)) ? "obsolete" : "superseded",
+		claimed: true
+	});
+	if (current.length === 0) return results;
+	const refreshes = await refreshContentMediaUsageForWorkBatch(db, current, { shouldContinue: canContinueBulkWork });
+	const successful = [];
+	const unstarted = [];
+	const failedRefreshes = [];
+	for (const candidate of current) {
+		const refresh = refreshes.get(contentRefreshKey(candidate.collectionId, candidate.contentId));
+		if (refresh?.success) successful.push(candidate);
+		else if (!refresh) unstarted.push(candidate);
+		else failedRefreshes.push({
+			candidate,
+			refresh
+		});
+	}
+	const terminalFailureCollections = /* @__PURE__ */ new Map();
+	const failureGroups = /* @__PURE__ */ new Map();
+	for (const failure of failedRefreshes) {
+		const errorCode = processingErrorCode(failure.refresh.errorCode);
+		const terminal = errorCode === "MEDIA_USAGE_RESOURCE_LIMIT" || failure.candidate.attemptCount + 1 >= MEDIA_USAGE_WORK_PROCESSING_LIMITS.maxAttempts;
+		const delay = retryDelaySeconds(failure.candidate.attemptCount);
+		const key = `${errorCode}\u0000${terminal ? "terminal" : String(delay)}`;
+		const group = failureGroups.get(key) ?? {
+			errorCode,
+			retryDelaySeconds: delay,
+			terminal,
+			candidates: []
+		};
+		group.candidates.push(failure.candidate);
+		failureGroups.set(key, group);
+	}
+	for (const group of failureGroups.values()) {
+		const transitioned = await repo.retryClaimedWorkBatch({
+			work: group.candidates.map(workLease),
+			errorCode: group.errorCode,
+			retryDelaySeconds: group.retryDelaySeconds,
+			maxAttempts: group.terminal ? 1 : MEDIA_USAGE_WORK_PROCESSING_LIMITS.maxAttempts
+		});
+		for (const candidate of group.candidates) {
+			const state = transitioned.get(workIdentityKey(candidate));
+			if (state === "failed") {
+				const collections = terminalFailureCollections.get(group.errorCode) ?? /* @__PURE__ */ new Set();
+				collections.add(candidate.collectionId);
+				terminalFailureCollections.set(group.errorCode, collections);
+			}
+			results.set(workResultKey(candidate), {
+				outcome: state ?? "superseded",
+				claimed: true
+			});
+		}
+	}
+	for (const [errorCode, collectionIds] of terminalFailureCollections) await new MediaUsageRepository(db).recordIncrementalFailuresByCollection({
+		collectionIds: [...collectionIds],
+		errorCode
+	});
+	const released = await repo.releaseClaimedWorkBatch(unstarted.map(workLease));
+	for (const candidate of unstarted) results.set(workResultKey(candidate), {
+		outcome: released.has(workIdentityKey(candidate)) ? "not_due" : "superseded",
+		claimed: true
+	});
+	const usage = new MediaUsageRepository(db);
+	const successfulByCollection = /* @__PURE__ */ new Map();
+	for (const candidate of successful) {
+		const key = collectionResultKey(candidate);
+		const collection = successfulByCollection.get(key) ?? [];
+		collection.push(candidate);
+		successfulByCollection.set(key, collection);
+	}
+	const readyToComplete = [];
+	const deferredCompletion = [];
+	const lostFinalization = [];
+	let pendingFinalizationQueries = 2;
+	for (const collection of successfulByCollection.values()) {
+		const first = collection[0];
+		if (!first) continue;
+		const metrics = getRequestContext()?.metrics;
+		if (metrics && metrics.dbCount + pendingFinalizationQueries + 4 > 900) {
+			deferredCompletion.push(...collection);
+			continue;
+		}
+		if ((await usage.prepareIncrementalFinalization({
+			collectionId: first.collectionId,
+			collectionSlug: first.collectionSlug
+		})).outcome !== "lost") {
+			readyToComplete.push(...collection);
+			pendingFinalizationQueries += 2;
+			continue;
+		}
+		lostFinalization.push(...collection);
+		pendingFinalizationQueries += 2;
+	}
+	const lostTransitions = await repo.retryClaimedWorkBatch({
+		work: lostFinalization.map(workLease),
+		errorCode: "MEDIA_USAGE_GENERATION_CONFLICT",
+		retryDelaySeconds: MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryBaseSeconds,
+		maxAttempts: MEDIA_USAGE_WORK_PROCESSING_LIMITS.maxAttempts
+	});
+	const lostFailedCollections = /* @__PURE__ */ new Set();
+	for (const candidate of lostFinalization) {
+		const state = lostTransitions.get(workIdentityKey(candidate));
+		if (state === "failed") lostFailedCollections.add(candidate.collectionId);
+		results.set(workResultKey(candidate), {
+			outcome: state ?? "superseded",
+			claimed: true
+		});
+	}
+	await usage.recordIncrementalFailuresByCollection({
+		collectionIds: [...lostFailedCollections],
+		errorCode: "MEDIA_USAGE_GENERATION_CONFLICT"
+	});
+	const deferred = await repo.releaseClaimedWorkBatch(deferredCompletion.map(workLease));
+	for (const candidate of deferredCompletion) results.set(workResultKey(candidate), {
+		outcome: deferred.has(workIdentityKey(candidate)) ? "not_due" : "superseded",
+		claimed: true
+	});
+	const completed = await repo.completeWorkBatch(readyToComplete.map(workLease));
+	const completedCollections = /* @__PURE__ */ new Map();
+	for (const candidate of readyToComplete) {
+		const didComplete = completed.has(workIdentityKey(candidate));
+		results.set(workResultKey(candidate), {
+			outcome: didComplete ? "completed" : "superseded",
+			claimed: true
+		});
+		if (didComplete) completedCollections.set(collectionResultKey(candidate), candidate);
+	}
+	for (const collection of completedCollections.values()) await usage.recordIncrementalSuccess({
+		collectionId: collection.collectionId,
+		collectionSlug: collection.collectionSlug
+	});
+	return results;
+}
+async function findCurrentCollectionIdentities(db, candidates) {
+	const identities = new Map(candidates.map((candidate) => [collectionResultKey(candidate), candidate]));
+	const current = /* @__PURE__ */ new Set();
+	for (const batch of chunkCollectionIds(Array.from(identities.values(), (item) => item.collectionId))) {
+		const rows = await db.selectFrom("_emdash_collections").select(["id", "slug"]).where("id", "in", batch).execute();
+		for (const row of rows) current.add(`${row.id}\u0000${row.slug}`);
+	}
+	return current;
+}
+function workLease(work) {
+	if (!work.leaseToken) throw new Error("Claimed media usage work requires a lease token");
+	return {
+		collectionId: work.collectionId,
+		contentId: work.contentId,
+		workVersion: work.workVersion,
+		leaseToken: work.leaseToken
+	};
+}
+function workIdentityKey(work) {
+	return `${work.collectionId}\u0000${work.contentId}\u0000${String(work.workVersion)}`;
+}
+function workResultKey(work) {
+	return workIdentityKey(work);
+}
+function collectionResultKey(work) {
+	return `${work.collectionId}\u0000${work.collectionSlug}`;
+}
+function chunkCollectionIds(ids) {
+	const unique = [...new Set(ids)];
+	const batches = [];
+	for (let index = 0; index < unique.length; index += 50) batches.push(unique.slice(index, index + 50));
+	return batches;
+}
+function canContinueBulkWork() {
+	const metrics = getRequestContext()?.metrics;
+	return !metrics || metrics.dbCount + 150 <= 900;
+}
+async function isIncrementalCaptureActive(db) {
+	return (await db.selectFrom("_emdash_media_usage_activation").select("state").where("task_key", "=", "incremental_capture").executeTakeFirst())?.state === "active";
+}
+function retryDelaySeconds(attemptCount) {
+	const exponential = Math.min(MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryMaxSeconds, MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryBaseSeconds * 2 ** attemptCount);
+	const jitter = Math.floor(exponential * MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryJitterRatio * Math.random());
+	return Math.min(MEDIA_USAGE_WORK_PROCESSING_LIMITS.retryMaxSeconds, exponential + jitter);
+}
+function processingErrorCode(errorCode) {
+	if (errorCode === "DRAFT_REVISION_NOT_FOUND" || errorCode === "DRAFT_REVISION_MISMATCH" || errorCode === "DRAFT_REVISION_INVALID") return "MEDIA_USAGE_SNAPSHOT_FAILED";
+	if (errorCode === "CONTENT_USAGE_GENERATION_CONFLICT") return "MEDIA_USAGE_GENERATION_CONFLICT";
+	if (errorCode === "CONTENT_USAGE_RESOURCE_LIMIT") return "MEDIA_USAGE_RESOURCE_LIMIT";
+	return "MEDIA_USAGE_PROCESSING_FAILED";
+}
+
+//#endregion
+//#region src/media/usage/maintenance-engine.ts
+const MEDIA_USAGE_MAINTENANCE_LIMITS = Object.freeze({
+	eventQueryCeiling: 900,
+	maxStepQueries: 150
+});
+const TASK_CLASSES = [
+	"collection_deletion",
+	"entry_work",
+	"reconciliation"
+];
+async function runMediaUsageMaintenanceStep(db) {
+	const activation = await db.selectFrom("_emdash_media_usage_activation").select(["state", "runtime_generation"]).where("task_key", "=", "incremental_capture").executeTakeFirst();
+	if (activation?.state !== "active" || activation.runtime_generation !== MEDIA_USAGE_ACTIVATION_RUNTIME_GENERATION) return runActivationStep(db);
+	let blocked = false;
+	let blockedReconciliation = false;
+	let madeProgress = false;
+	for (const taskClass of TASK_CLASSES) {
+		const metrics = getRequestContext()?.metrics;
+		if (metrics && !canStartMediaUsageMaintenanceStep(metrics)) return madeProgress ? {
+			state: "progress",
+			continuation: { kind: "immediate" }
+		} : {
+			state: "blocked",
+			continuation: { kind: "immediate" }
+		};
+		const outcome = await runTaskClass(db, taskClass);
+		if (outcome === "inactive") return inactiveResult();
+		if (outcome === "progress") madeProgress = true;
+		if (outcome === "blocked") {
+			blocked = true;
+			if (taskClass === "reconciliation") blockedReconciliation = true;
+		}
+	}
+	if (madeProgress) return {
+		state: "progress",
+		continuation: { kind: "immediate" }
+	};
+	if (blockedReconciliation && await new MediaUsageReconciliationRepository(db).wakeDrainedBarrierCandidate()) return {
+		state: "progress",
+		continuation: { kind: "immediate" }
+	};
+	if (blocked) return {
+		state: "blocked",
+		continuation: {
+			kind: "delayed",
+			delaySeconds: 30
+		}
+	};
+	return {
+		state: "idle",
+		continuation: { kind: "none" }
+	};
+}
+async function runActivationStep(db) {
+	try {
+		const result = await continueMediaUsageActivation(db);
+		if (result.outcome === "activating" || result.outcome === "active") return {
+			state: "progress",
+			continuation: { kind: "immediate" }
+		};
+		if (result.outcome === "lease_active" || result.outcome === "conflict") return {
+			state: "blocked",
+			continuation: {
+				kind: "delayed",
+				delaySeconds: 30
+			}
+		};
+		return inactiveResult();
+	} catch (error) {
+		if (error instanceof MediaUsageActivationVersionMismatchError) return inactiveResult();
+		throw error;
+	}
+}
+async function runTaskClass(db, taskClass) {
+	if (taskClass === "entry_work") {
+		const result = await processDueMediaUsageWork(db, { activationKnownActive: true });
+		if (result.claimedCount > 0) return "progress";
+		return result.candidateCount > 0 ? "blocked" : "idle";
+	}
+	if (taskClass === "collection_deletion") {
+		const result = await processDueMediaUsageCollectionDeletions(db);
+		if (result.claimedCount > 0) return "progress";
+		return result.candidateCount > 0 ? "blocked" : "idle";
+	}
+	const result = await processDueMediaUsageReconciliationDetailed(db, { activationKnownActive: true });
+	if (result.outcome === "inactive") return "inactive";
+	if (result.consumedUnit) return "progress";
+	return result.outcome === "claim_lost" || result.hasDeferredCandidate ? "blocked" : "idle";
+}
+function inactiveResult() {
+	return {
+		state: "inactive",
+		continuation: { kind: "none" }
+	};
+}
+function canStartMediaUsageMaintenanceStep(metrics) {
+	return metrics.dbCount + MEDIA_USAGE_MAINTENANCE_LIMITS.maxStepQueries <= MEDIA_USAGE_MAINTENANCE_LIMITS.eventQueryCeiling;
+}
+
+//#endregion
+//#region src/api/handlers/media-usage.ts
+var media_usage_exports = /* @__PURE__ */ __exportAll({
+	aggregateMediaUsageCoverageStatus: () => aggregateMediaUsageCoverageStatus,
+	handleMediaUsageDetails: () => handleMediaUsageDetails,
+	handleMediaUsageProgress: () => handleMediaUsageProgress,
+	handleMediaUsageProgressAdvance: () => handleMediaUsageProgressAdvance,
+	handleMediaUsageRepair: () => handleMediaUsageRepair,
+	handleMediaUsageSummaries: () => handleMediaUsageSummaries,
+	toMediaUsageRepairResponse: () => toMediaUsageRepairResponse
+});
+async function handleMediaUsageProgress(db) {
+	try {
+		const progress = await new MediaUsageRepository(db).findCollectionProgress();
+		if (!progress) return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_PROGRESS_NOT_ACTIVE,
+				message: "Media Usage is not active"
+			}
+		};
+		return {
+			success: true,
+			data: progress
+		};
+	} catch (error) {
+		if (error instanceof MediaUsageActivationVersionMismatchError) return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_ACTIVATION_VERSION_MISMATCH,
+				message: "Media Usage activation version does not match this runtime"
+			}
+		};
+		console.error("[media-usage] progress read failed:", error);
+		return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_PROGRESS_READ_ERROR,
+				message: "Failed to read media usage progress"
+			}
+		};
+	}
+}
+async function handleMediaUsageProgressAdvance(db) {
+	try {
+		const step = await runMediaUsageMaintenanceStep(db);
+		const activation = await getMediaUsageActivationStatus(db);
+		if (activation.state === "expanded") return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_PROGRESS_NOT_ACTIVE,
+				message: "Media Usage activation has not started"
+			}
+		};
+		const progress = activation.state === "active" ? await new MediaUsageRepository(db).findCollectionProgress() : null;
+		return {
+			success: true,
+			data: {
+				activation,
+				progress,
+				nextRequestInMs: continuationDelayMs(step.continuation, progress)
+			}
+		};
+	} catch (error) {
+		if (error instanceof MediaUsageActivationVersionMismatchError) return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_ACTIVATION_VERSION_MISMATCH,
+				message: "Media Usage activation version does not match this runtime"
+			}
+		};
+		console.error("[media-usage] progress advance failed:", error);
+		return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_PROGRESS_ADVANCE_ERROR,
+				message: "Failed to advance media usage progress"
+			}
+		};
+	}
+}
+function continuationDelayMs(continuation, progress) {
+	if (progress?.status === "needs_attention") return null;
+	if (continuation.kind === "immediate") return 0;
+	if (continuation.kind === "delayed") return 3e4;
+	if (progress?.status === "indexing") return 0;
+	return null;
+}
+function aggregateMediaUsageCoverageStatus(scopes) {
+	const statuses = scopes.map(normalizeMediaUsageCoverageStatus);
+	if (statuses.every((status) => status === "complete")) return "complete";
+	if (statuses.includes("unknown")) return "unknown";
+	if (statuses.includes("running")) return "running";
+	if (statuses.includes("stale")) return "stale";
+	if (statuses.includes("partial")) return "partial";
+	if (statuses.every((status) => status === "never")) return "never";
+	if (statuses.every((status) => status === "failed")) return "failed";
+	return "partial";
+}
+async function handleMediaUsageSummaries(db, mediaIds, options) {
+	if (mediaIds.length === 0) return {
+		success: true,
+		data: {}
+	};
+	try {
+		const repository = new MediaUsageRepository(db);
+		const coverage = await loadMediaUsageCoverage(repository);
+		const counts = options.includeCount && coverage.status === "complete" ? await repository.findActiveEntryCountsByMediaIds(mediaIds) : null;
+		const summaries = {};
+		for (const mediaId of new Set(mediaIds)) summaries[mediaId] = {
+			count: counts ? counts.get(mediaId) ?? 0 : null,
+			coverage
+		};
+		return {
+			success: true,
+			data: summaries
+		};
+	} catch (error) {
+		console.error("[media-usage] summary read failed:", error);
+		return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_READ_ERROR,
+				message: "Failed to read media usage"
+			}
+		};
+	}
+}
+async function handleMediaUsageDetails(db, mediaId, options) {
+	try {
+		if (!await new MediaRepository(db).findById(mediaId)) return {
+			success: false,
+			error: {
+				code: ErrorCode.NOT_FOUND,
+				message: `Media item not found: ${mediaId}`
+			}
+		};
+		const repository = new MediaUsageRepository(db);
+		const coverage = await loadMediaUsageCoverage(repository);
+		const page = await repository.findCurrentEntryUsagePageByMediaId(mediaId, options);
+		return {
+			success: true,
+			data: {
+				items: page.items.map(toMediaUsageEntryDetail),
+				...page.nextCursor ? { nextCursor: page.nextCursor } : {},
+				coverage
+			}
+		};
+	} catch (error) {
+		if (error instanceof InvalidCursorError) return {
+			success: false,
+			error: {
+				code: ErrorCode.INVALID_CURSOR,
+				message: error.message
+			}
+		};
+		console.error("[media-usage] detail read failed:", error);
+		return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_READ_ERROR,
+				message: "Failed to read media usage"
+			}
+		};
+	}
+}
+async function handleMediaUsageRepair(db, input) {
+	try {
+		let result;
+		if (input.scope === "collection") result = await repairContentMediaUsageCollection(db, { collectionSlug: input.collection });
+		else if (input.scope === "all") result = await repairContentMediaUsageAll(db);
+		else return {
+			success: false,
+			error: {
+				code: ErrorCode.VALIDATION_ERROR,
+				message: "Invalid media usage repair request"
+			}
+		};
+		return {
+			success: true,
+			data: toMediaUsageRepairResponse(result)
+		};
+	} catch (error) {
+		console.error("[media-usage] repair failed:", error);
+		return {
+			success: false,
+			error: {
+				code: ErrorCode.MEDIA_USAGE_REPAIR_ERROR,
+				message: "Failed to repair media usage"
+			}
+		};
+	}
+}
+function toMediaUsageRepairResponse(result) {
+	const collections = "collections" in result ? result.collections : [result];
+	return {
+		status: result.status,
+		indexedSourceCount: result.indexedSourceCount,
+		failedSourceCount: result.failedSourceCount,
+		skippedSourceCount: result.skippedSourceCount,
+		deletedSourceCount: result.deletedSourceCount,
+		collections: collections.map(toMediaUsageRepairCollectionSummary)
+	};
+}
+function toMediaUsageRepairCollectionSummary(result) {
+	return {
+		collection: result.scope.scopeKey,
+		status: result.status,
+		indexedSourceCount: result.indexedSourceCount,
+		failedSourceCount: result.failedSourceCount,
+		skippedSourceCount: result.skippedSourceCount,
+		deletedSourceCount: result.deletedSourceCount,
+		lastErrorCode: result.lastErrorCode,
+		startedAt: result.startedAt,
+		completedAt: result.completedAt
+	};
+}
+function normalizeMediaUsageCoverageStatus(scope) {
+	if (scope.status === null) return "never";
+	if (scope.status === "complete") {
+		if (scope.reconciliationRequired) return "stale";
+		return scope.schemaVersion === CONTENT_SOURCE_SCHEMA_VERSION ? "complete" : "stale";
+	}
+	if (scope.status === "never" || scope.status === "running" || scope.status === "partial" || scope.status === "failed" || scope.status === "stale") return scope.status;
+	return "unknown";
+}
+async function loadMediaUsageCoverage(repository) {
+	return {
+		scope: "all_content_collections",
+		status: aggregateMediaUsageCoverageStatus(await repository.findCollectionIndexStatusScopes({
+			adapterId: CONTENT_MEDIA_USAGE_ADAPTER_ID,
+			scopeType: CONTENT_MEDIA_USAGE_COLLECTION_SCOPE
+		}))
+	};
+}
+function toMediaUsageEntryDetail(group) {
+	const preferred = group.sources.find(({ source }) => source.sourceVariant === "draft_overlay") ?? group.sources.find(({ source }) => source.sourceVariant === "columns");
+	if (!preferred) throw new Error("Media usage entry has no supported source");
+	return {
+		collection: group.collectionSlug,
+		contentId: group.contentId,
+		title: preferred.source.contentTitle,
+		slug: preferred.source.contentSlug,
+		locale: preferred.source.locale,
+		status: preferred.source.contentStatus,
+		scheduledAt: preferred.source.contentScheduledAt,
+		deletedAt: group.contentDeletedAt,
+		sources: group.sources.flatMap(({ source, occurrences }) => {
+			if (source.sourceVariant !== "columns" && source.sourceVariant !== "draft_overlay") return [];
+			return [{
+				variant: source.sourceVariant,
+				occurrences: occurrences.map((occurrence) => ({
+					fieldSlug: occurrence.fieldSlug,
+					fieldPath: occurrence.fieldPath,
+					occurrenceIndex: occurrence.occurrenceIndex,
+					referenceType: normalizeMediaUsageReferenceType(occurrence.referenceType)
+				}))
+			}];
+		})
+	};
+}
+function normalizeMediaUsageReferenceType(referenceType) {
+	if (referenceType === "image_field" || referenceType === "file_field" || referenceType === "portable_text_image") return referenceType;
+	return "unknown";
+}
+
+//#endregion
+export { handleMediaUsageSummaries as a, handleMediaUsageRepair as i, handleMediaUsageProgress as n, media_usage_exports as o, handleMediaUsageProgressAdvance as r, processMediaUsageWorkAfterWrite as s, handleMediaUsageDetails as t };
+//# sourceMappingURL=media-usage-C1EswMTq.mjs.map

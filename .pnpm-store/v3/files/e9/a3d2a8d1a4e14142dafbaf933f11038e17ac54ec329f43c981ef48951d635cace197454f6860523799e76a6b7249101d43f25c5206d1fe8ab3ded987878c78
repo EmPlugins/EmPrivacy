@@ -1,0 +1,16 @@
+import { t as OptionsRepository } from "./options-D1FBiAv1.mjs";
+import { t as getConfiguredOrigin } from "./public-url-FWWAvnre.mjs";
+
+//#region src/api/site-url.ts
+async function getSiteBaseUrl(db, request, config) {
+	const configured = getConfiguredOrigin(config);
+	if (configured) return `${configured}/_emdash`;
+	const storedUrl = await new OptionsRepository(db).get("emdash:site_url");
+	if (storedUrl) return `${storedUrl}/_emdash`;
+	const url = new URL(request.url);
+	return `${url.protocol}//${url.host}/_emdash`;
+}
+
+//#endregion
+export { getSiteBaseUrl as t };
+//# sourceMappingURL=site-url-Bqf-ea3N.mjs.map

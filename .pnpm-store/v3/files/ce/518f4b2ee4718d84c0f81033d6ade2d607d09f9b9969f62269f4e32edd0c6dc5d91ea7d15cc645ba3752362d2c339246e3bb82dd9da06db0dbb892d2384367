@@ -1,0 +1,116 @@
+import "../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../config-C3EBstHi.mjs";
+import "../../../../base64-CvLhUKQv.mjs";
+import "../../../../types-CQPWhPxE.mjs";
+import { t as MediaRepository } from "../../../../media-BBm8Wg3f.mjs";
+import "../../../../fts-manager-iddym8cd.mjs";
+import "../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../activation-DyNTe_Tl.mjs";
+import "../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../media-usage-work-C5B1zT1c.mjs";
+import "../../../../content-repair-CIMt5C0U.mjs";
+import { a as handleMediaUsageSummaries } from "../../../../media-usage-C1EswMTq.mjs";
+import { a as unwrapResult, n as apiSuccess, r as handleError, t as apiError } from "../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, n as parseBody, t as isParseError } from "../../../../parse-WRg5C3NX.mjs";
+import { O as mediaUpdateBody, m as mediaGetQuery } from "../../../../media-C1EIZKh1.mjs";
+import "../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../relations-rOmbndUJ.mjs";
+import "../../../../status-Cenfk_r5.mjs";
+import "../../../../api/schemas/index.mjs";
+import { t as removeUploadAttempt } from "../../../../upload-attempts-C6S2y-lp.mjs";
+import { n as requireOwnerPerm, r as requirePerm, t as canReadMediaUsageCount } from "../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/media/[id].ts
+const prerender = false;
+/**
+* Get media item
+*/
+const GET = async ({ params, request, locals }) => {
+	const { emdash, user } = locals;
+	const { id } = params;
+	const readDenied = requirePerm(user, "media:read");
+	if (readDenied) return readDenied;
+	if (!id) return apiError("INVALID_REQUEST", "Media ID required", 400);
+	if (!emdash?.handleMediaGet) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	const query = parseQuery(new URL(request.url), mediaGetQuery);
+	if (isParseError(query)) return query;
+	const result = await emdash.handleMediaGet(id);
+	if (!result.success || query.includeUsage !== "1") return unwrapResult(result);
+	const includeCount = canReadMediaUsageCount(user, locals.tokenScopes);
+	const usageResult = await handleMediaUsageSummaries(emdash.db, [id], { includeCount });
+	if (!usageResult.success) return unwrapResult(usageResult);
+	const usage = usageResult.data[id];
+	if (!usage) return apiError("MEDIA_USAGE_READ_ERROR", "Failed to read media usage", 500);
+	return apiSuccess({ item: {
+		...result.data.item,
+		usage
+	} });
+};
+/**
+* Update media metadata
+*
+* Authors can edit their own media; editors+ can edit any.
+*/
+const PUT = async ({ params, request, locals }) => {
+	const { emdash, user } = locals;
+	const { id } = params;
+	const editDenied = requirePerm(user, "media:edit_own");
+	if (editDenied) return editDenied;
+	if (!id) return apiError("INVALID_REQUEST", "Media ID required", 400);
+	if (!emdash?.handleMediaGet || !emdash?.handleMediaUpdate) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	try {
+		const getResult = await emdash.handleMediaGet(id);
+		if (!getResult.success || !getResult.data?.item) return apiError("NOT_FOUND", "Media item not found", 404);
+		const media = getResult.data.item;
+		const ownerDenied = requireOwnerPerm(user, media.authorId, "media:edit_own", "media:edit_any");
+		if (ownerDenied) return ownerDenied;
+		const body = await parseBody(request, mediaUpdateBody);
+		if (isParseError(body)) return body;
+		return unwrapResult(await emdash.handleMediaUpdate(id, {
+			alt: body.alt,
+			caption: body.caption,
+			width: body.width,
+			height: body.height,
+			folderId: body.folderId,
+			focalX: body.focalX,
+			focalY: body.focalY
+		}));
+	} catch (error) {
+		return handleError(error, "Failed to update media", "MEDIA_UPDATE_ERROR");
+	}
+};
+/**
+* Delete media item
+*
+* Authors can delete their own media; editors+ can delete any.
+*/
+const DELETE = async ({ params, locals }) => {
+	const { emdash, user } = locals;
+	const { id } = params;
+	const deleteDenied = requirePerm(user, "media:delete_own");
+	if (deleteDenied) return deleteDenied;
+	if (!id) return apiError("INVALID_REQUEST", "Media ID required", 400);
+	if (!emdash?.handleMediaGet || !emdash?.handleMediaDelete) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	try {
+		const getResult = await emdash.handleMediaGet(id);
+		if (!getResult.success || !getResult.data?.item) return apiError("NOT_FOUND", "Media item not found", 404);
+		const media = getResult.data.item;
+		const ownerDenied = requireOwnerPerm(user, media.authorId, "media:delete_own", "media:delete_any");
+		if (ownerDenied) return ownerDenied;
+		const result = await emdash.handleMediaDelete(id);
+		if (!result.success) return unwrapResult(result);
+		if (typeof result.data !== "object" || result.data === null || !("storageKey" in result.data) || typeof result.data.storageKey !== "string") return apiError("MEDIA_DELETE_ERROR", "Failed to delete media", 500);
+		if (emdash.storage) {
+			const repo = new MediaRepository(emdash.db);
+			await removeUploadAttempt(emdash.storage, repo, result.data.storageKey, { allowUntracked: true });
+		}
+		return apiSuccess({ deleted: true });
+	} catch (error) {
+		return handleError(error, "Failed to delete media", "MEDIA_DELETE_ERROR");
+	}
+};
+
+//#endregion
+export { DELETE, GET, PUT, prerender };
+//# sourceMappingURL=_id_.mjs.map

@@ -1,0 +1,69 @@
+import { _ as MediaValue, a as ComponentEmbed, b as mediaItemToValue, c as EmbedResult, d as MediaListResult, f as MediaProvider, g as MediaUploadInput, h as MediaProviderItem, i as AudioEmbed, l as ImageEmbed, m as MediaProviderDescriptor, n as generatePlaceholder, o as CreateMediaProviderFn, p as MediaProviderCapabilities, r as normalizeMediaValue, s as EmbedOptions, t as PlaceholderData, u as MediaListOptions, v as ThumbnailOptions, y as VideoEmbed } from "../placeholder-COrvARyD.mjs";
+
+//#region src/media/enrich.d.ts
+/**
+ * Image Metadata Enrichment
+ *
+ * Single seam that derives image dimensions and LQIP placeholders (blurhash,
+ * dominant color) from raw image bytes. Every server-side media-creation path
+ * routes through this so records are populated consistently. Pure-JS and
+ * Workers-safe (image-size reads headers only; generatePlaceholder guards
+ * decode size).
+ */
+interface EnrichedImageMetadata {
+  width?: number;
+  height?: number;
+  blurhash?: string;
+  dominantColor?: string;
+}
+/**
+ * Derive dimensions + LQIP placeholders from image bytes.
+ *
+ * - Non-image content types return `{}`.
+ * - `knownDimensions` (e.g. browser `naturalWidth/Height`) win over `image-size`
+ *   for the *stored record* because the browser applies EXIF orientation;
+ *   `image-size` reports raw header dimensions, which are swapped for
+ *   90°/270°-rotated JPEGs. They are NOT used for the decode OOM guard — see below.
+ * - The placeholder OOM guard uses only header dimensions read from the bytes
+ *   actually decoded. Caller-supplied `knownDimensions` are untrusted for the
+ *   guard: a client could claim a tiny size for a huge image to bypass the cap.
+ * - `placeholder` lets a caller decode a smaller thumbnail for the blurhash to
+ *   avoid OOM on large originals; dimensions still come from `bytes`.
+ * - Placeholders are jpeg/png only (the generator's supported formats); other
+ *   image types still get dimensions.
+ */
+declare function enrichImageMetadata(bytes: Uint8Array, contentType: string, opts?: {
+  knownDimensions?: {
+    width: number;
+    height: number;
+  };
+  placeholder?: {
+    bytes: Uint8Array;
+    contentType: string;
+  };
+}): Promise<EnrichedImageMetadata>;
+//#endregion
+//#region src/media/local.d.ts
+interface LocalMediaConfig {
+  /** Whether the local provider is enabled (default true) */
+  enabled?: boolean;
+}
+/**
+ * Local media provider configuration
+ *
+ * @example
+ * ```ts
+ * import { localMedia } from "emdash/media";
+ *
+ * emdash({
+ *   mediaProviders: [
+ *     localMedia(), // Uses defaults
+ *     // or: localMedia({ enabled: false }) to disable
+ *   ],
+ * })
+ * ```
+ */
+declare function localMedia(config?: LocalMediaConfig): MediaProviderDescriptor;
+//#endregion
+export { type AudioEmbed, type ComponentEmbed, type CreateMediaProviderFn, type EmbedOptions, type EmbedResult, type EnrichedImageMetadata, type ImageEmbed, type LocalMediaConfig, type MediaListOptions, type MediaListResult, type MediaProvider, type MediaProviderCapabilities, type MediaProviderDescriptor, type MediaProviderItem, type MediaUploadInput, type MediaValue, type PlaceholderData, type ThumbnailOptions, type VideoEmbed, enrichImageMetadata, generatePlaceholder, localMedia, mediaItemToValue, normalizeMediaValue };
+//# sourceMappingURL=index.d.mts.map

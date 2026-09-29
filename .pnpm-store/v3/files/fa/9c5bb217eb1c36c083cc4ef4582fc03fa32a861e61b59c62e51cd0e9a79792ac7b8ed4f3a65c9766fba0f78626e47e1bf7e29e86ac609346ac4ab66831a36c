@@ -1,0 +1,103 @@
+import { i as isI18nEnabled, r as getI18nConfig } from "./config-C3EBstHi.mjs";
+import { t as ContentRepository } from "./content-CNfMWuhY.mjs";
+import { n as localizePath, t as interpolateUrlPattern } from "./resolve-Cy0aWSRj.mjs";
+import { r as requestCached } from "./request-cache-DAZZmesc.mjs";
+import { n as getCollectionInfoWithDb } from "./query-gtXT03Wc.mjs";
+import { o as getSiteSettingsWithDb } from "./settings-DcMjREe5.mjs";
+
+//#region src/seo/hreflang.ts
+const TRAILING_SLASH_RE = /\/$/;
+const ABSOLUTE_URL_RE = /^https?:\/\//i;
+/**
+* IDs of variants flagged `noindex` in the SEO panel. Entries without
+* an `_emdash_seo` row are indexable by default (same as the sitemap).
+* The id list is bounded by the number of configured locales, so no
+* chunking is needed.
+*/
+async function findNoindexIds(db, collection, ids) {
+	if (ids.length === 0) return /* @__PURE__ */ new Set();
+	const rows = await db.selectFrom("_emdash_seo").select("content_id").where("collection", "=", collection).where("content_id", "in", ids).where("seo_no_index", "=", 1).execute();
+	return new Set(rows.map((r) => r.content_id));
+}
+/**
+* Resolve hreflang alternates for a content entry.
+*
+* @example
+* ```astro
+* ---
+* import { getHreflangAlternates } from "emdash";
+*
+* const alternates = await getHreflangAlternates("posts", entry.data.id, {
+*   siteUrl: Astro.url.origin,
+* });
+* ---
+* <head>
+*   {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+* </head>
+* ```
+*/
+async function getHreflangAlternates(collection, entryId, options = {}) {
+	if (!isI18nEnabled()) return [];
+	return requestCached(`hreflang:${collection}:${entryId}:${options.siteUrl ?? ""}`, async () => {
+		const { getDb } = await import("./loader-WJi6GFRn.mjs").then((n) => n.c);
+		return getHreflangAlternatesWithDb(await getDb(), collection, entryId, options);
+	});
+}
+/**
+* Resolve hreflang alternates with an explicit db handle.
+*
+* @internal Use `getHreflangAlternates()` in templates. This variant is
+* for routes/components that already have a database handle.
+*/
+async function getHreflangAlternatesWithDb(db, collection, entryId, options = {}) {
+	if (!isI18nEnabled()) return [];
+	let siteUrl = options.siteUrl;
+	if (!siteUrl) siteUrl = (await getSiteSettingsWithDb(db)).url;
+	if (!siteUrl || !ABSOLUTE_URL_RE.test(siteUrl)) return [];
+	siteUrl = siteUrl.replace(TRAILING_SLASH_RE, "");
+	const repo = new ContentRepository(db);
+	const item = await repo.findByIdOrSlug(collection, entryId);
+	if (!item) return [];
+	const group = item.translationGroup || item.id;
+	let variants = await repo.findTranslations(collection, group);
+	if (variants.length === 0) variants = [item];
+	let published = variants.filter((v) => v.status === "published");
+	if (published.length === 0) return [];
+	const noindexIds = await findNoindexIds(db, collection, published.map((v) => v.id));
+	if (noindexIds.has(item.id)) return [];
+	published = published.filter((v) => !noindexIds.has(v.id));
+	const urlPattern = (await getCollectionInfoWithDb(db, collection))?.urlPattern ?? null;
+	const resolved = [];
+	for (const variant of published) {
+		const locale = variant.locale || "en";
+		const localized = await localizePath(interpolateUrlPattern({
+			pattern: urlPattern,
+			collection,
+			slug: variant.slug || variant.id,
+			id: variant.id,
+			date: variant.publishedAt
+		}), locale);
+		if (localized === null) continue;
+		resolved.push({
+			locale,
+			href: `${siteUrl}${localized}`
+		});
+	}
+	if (resolved.length === 0) return [];
+	resolved.sort((a, b) => a.locale.localeCompare(b.locale));
+	const alternates = resolved.map((r) => ({
+		hreflang: r.locale,
+		href: r.href
+	}));
+	const defaultLocale = getI18nConfig()?.defaultLocale;
+	const xDefault = resolved.find((r) => r.locale === defaultLocale) ?? resolved[0];
+	if (xDefault) alternates.push({
+		hreflang: "x-default",
+		href: xDefault.href
+	});
+	return alternates;
+}
+
+//#endregion
+export { getHreflangAlternatesWithDb as n, getHreflangAlternates as t };
+//# sourceMappingURL=hreflang-DshnweTC.mjs.map

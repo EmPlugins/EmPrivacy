@@ -1,0 +1,28 @@
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import { a as unwrapResult, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../media-C1EIZKh1.mjs";
+import { gn as contentTrashQuery } from "../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/content/[collection]/trash.ts
+const prerender = false;
+const GET = async ({ params, url, locals }) => {
+	const { emdash, user } = locals;
+	const collection = params.collection;
+	if (!emdash?.handleContentListTrashed) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	const denied = requirePerm(user, "content:read_drafts");
+	if (denied) return denied;
+	const query = parseQuery(url, contentTrashQuery);
+	if (isParseError(query)) return query;
+	return unwrapResult(await emdash.handleContentListTrashed(collection, query));
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=trash.mjs.map

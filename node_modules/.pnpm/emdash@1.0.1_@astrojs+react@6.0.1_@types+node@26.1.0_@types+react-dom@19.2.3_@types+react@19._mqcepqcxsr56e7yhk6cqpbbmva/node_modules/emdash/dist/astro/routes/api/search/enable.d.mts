@@ -1,0 +1,17 @@
+import { APIRoute } from "astro";
+
+//#region src/astro/routes/api/search/enable.d.ts
+declare const prerender = false;
+/**
+ * Enable or disable search for a collection
+ *
+ * Body:
+ * - collection: Collection slug (required)
+ * - enabled: boolean (required)
+ * - weights: Optional field weights for ranking
+ * - tokenize: Optional FTS5 tokenizer configuration
+ */
+declare const POST: APIRoute;
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=enable.d.mts.map

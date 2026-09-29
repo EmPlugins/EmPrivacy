@@ -1,0 +1,4692 @@
+#!/usr/bin/env node
+import { a as getMigrationStatus, c as __exportAll, s as runMigrations } from "../runner-nEzvnogG.mjs";
+import { t as EmDashDatabaseError } from "../errors-9P_FDrJ_.mjs";
+import { t as validateIdentifier } from "../validate-BpwoDOgt.mjs";
+import { d as listTablesLike } from "../dialect-helpers-BcQvkHgn.mjs";
+import { i as isI18nEnabled, r as getI18nConfig } from "../config-C3EBstHi.mjs";
+import "../after-CBU2vkoO.mjs";
+import "../object-cache-DVKnyOfy.mjs";
+import { t as ContentRepository } from "../content-CNfMWuhY.mjs";
+import { n as isMissingTableError } from "../db-errors-Cl-sKYTm.mjs";
+import { n as slugify } from "../slugify-B994zkXC.mjs";
+import { a as encodeBase64url } from "../base64-CvLhUKQv.mjs";
+import "../types-CQPWhPxE.mjs";
+import { t as MediaRepository } from "../media-BBm8Wg3f.mjs";
+import { t as TaxonomyRepository } from "../taxonomy-DP1vny4K.mjs";
+import { t as OptionsRepository } from "../options-D1FBiAv1.mjs";
+import "../resolve-Cy0aWSRj.mjs";
+import "../redirect-DId44BS1.mjs";
+import "../request-cache-DAZZmesc.mjs";
+import "../byline-registry-BxDGIO0I.mjs";
+import "../field-defs-cache-Cf5FHK0M.mjs";
+import { t as BylineRepository } from "../byline-Vdi85CsZ.mjs";
+import "../dist-BAsh8dbf.mjs";
+import "../fts-manager-iddym8cd.mjs";
+import { kyselyLogOption } from "../database/instrumentation.mjs";
+import "../loader-WJi6GFRn.mjs";
+import "../collection-slugs-cache-7lTmNzeA.mjs";
+import "../capture-triggers-CeAsC76Z.mjs";
+import "../activation-DyNTe_Tl.mjs";
+import "../collection-deletion-BCwaWTDw.mjs";
+import "../content-refresh-GTMyi2Xy.mjs";
+import { n as SchemaRegistry } from "../registry-DTqaqxed.mjs";
+import "../settings-DcMjREe5.mjs";
+import { i as pluginManifestSchema } from "../manifest-schema-CILooI5J.mjs";
+import { r as isDeprecatedCapability, t as CAPABILITY_RENAMES } from "../types-A2cN6a4a.mjs";
+import "../ssrf-gl4gFNhw.mjs";
+import "../ssrf-TQhaljuI.mjs";
+import { t as validateSeed } from "../validate-D8VPn4Hv.mjs";
+import { t as applySeed } from "../apply-DLmM3R7f.mjs";
+import { a as MigrationManifestValidationError, c as normalizeAstroI18n, i as getMigrationIntegrationMetadata, n as MIGRATION_CONFIG_SYMBOL, s as validateMigrationManifest, t as buildMigrationManifest } from "../manifest-builder-BfNlGQIA.mjs";
+import "../identity-CjGKDq8J.mjs";
+import { n as fingerprintKey, r as generateEncryptionKey, t as EmDashSecretsError } from "../secrets-CdfzLdoO.mjs";
+import { t as openNodeSqliteDatabase } from "../node-sqlite-compat-2sezm-Zd.mjs";
+import { LocalStorage } from "../storage/local.mjs";
+import { t as convertDataForRead } from "../portable-text-BS3d5n-0.mjs";
+import { createHeaderAwareFetch, customHeadersInterceptor, getCachedAccessToken, isAccessRedirect, resolveCustomHeaders, runCloudflaredLogin } from "../client/cf-access.mjs";
+import { EmDashClient } from "../client/index.mjs";
+import { r as fileExists$4, t as bundleCommand } from "../bundle-CL0JjIPx.mjs";
+import { createRequire } from "node:module";
+import { Kysely, SqliteDialect, sql } from "kysely";
+import { createGzipDecoder, unpackTar } from "modern-tar";
+import { pathToFileURL } from "node:url";
+import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { defineCommand, runCommand, runMain } from "citty";
+import consola, { consola as consola$1 } from "consola";
+import pc from "picocolors";
+import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+import { parse as parse$1, printParseErrorCode } from "jsonc-parser";
+import { parse as parse$2 } from "smol-toml";
+import { createInterface } from "node:readline/promises";
+
+//#region src/cli/commands/auth.ts
+/**
+* Auth CLI commands (deprecated)
+*
+* Kept as a deprecated alias for backwards compatibility. The original
+* `emdash auth secret` was documented in published docs and is plausibly
+* scripted in user CI (e.g. `npx emdash auth secret >> .env`). Removing
+* it outright would break those scripts on minor-version upgrade.
+*
+* The command still emits an `EMDASH_AUTH_SECRET=<32-byte-base64url>`
+* line, unchanged. `EMDASH_AUTH_SECRET` itself is now legacy: it's only
+* read as a fallback source for the commenter-IP hash salt so installs
+* upgrading from a prior version keep stable IP hashes (and therefore
+* stable rate-limit buckets). New installs don't need to set it.
+*
+* The deprecation note steers users toward `emdash secrets generate`
+* (which emits a different, versioned `emdash_enc_v1_*` value for
+* `EMDASH_ENCRYPTION_KEY` — used to encrypt plugin secrets at rest).
+*
+* Will be removed in a future minor.
+*/
+function generateAuthSecret() {
+	const bytes = new Uint8Array(32);
+	crypto.getRandomValues(bytes);
+	return encodeBase64url(bytes);
+}
+const secretCommand = defineCommand({
+	meta: {
+		name: "secret",
+		description: "[DEPRECATED] Generate a value for legacy EMDASH_AUTH_SECRET"
+	},
+	run() {
+		const secret = generateAuthSecret();
+		consola$1.log("");
+		consola$1.log(pc.bold("Generated auth secret:"));
+		consola$1.log("");
+		consola$1.log(`  ${pc.cyan("EMDASH_AUTH_SECRET")}=${pc.green(secret)}`);
+		consola$1.log("");
+		consola$1.log(pc.dim("Add this to your environment variables."));
+		consola$1.log("");
+		process.stderr.write(`${pc.yellow("Note:")} ${pc.bold("emdash auth secret")} is deprecated and will be removed in a future minor. ${pc.cyan("EMDASH_AUTH_SECRET")} itself is now optional — it's only used as a legacy fallback for the commenter-IP hash salt. For encrypting plugin secrets at rest, use ${pc.bold("emdash secrets generate")} (a different secret: ${pc.cyan("EMDASH_ENCRYPTION_KEY")}).\n`);
+	}
+});
+const authCommand = defineCommand({
+	meta: {
+		name: "auth",
+		description: "[DEPRECATED] Authentication utilities (use `emdash secrets` for new flows)"
+	},
+	subCommands: { secret: secretCommand }
+});
+
+//#endregion
+//#region src/cli/credentials.ts
+/**
+* Credential storage for CLI auth tokens.
+*
+* Stores OAuth tokens in ~/.config/emdash/auth.json.
+* Remote URLs are keyed by origin, local dev by project path.
+*/
+function getConfigDir() {
+	const xdg = process.env["XDG_CONFIG_HOME"];
+	if (xdg) return join(xdg, "emdash");
+	return join(homedir(), ".config", "emdash");
+}
+function getCredentialPath() {
+	return join(getConfigDir(), "auth.json");
+}
+/**
+* Resolve the credential key for a given URL.
+*
+* Remote URLs are keyed by origin (e.g. "https://my-site.pages.dev").
+* Local dev instances are keyed by project path (e.g. "path:/Users/matt/sites/blog").
+*/
+function resolveCredentialKey(baseUrl) {
+	try {
+		const url = new URL(baseUrl);
+		if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]") {
+			const projectPath = findProjectRoot$1(process.cwd());
+			if (projectPath) return `path:${projectPath}`;
+			return url.origin;
+		}
+		return url.origin;
+	} catch {
+		return baseUrl;
+	}
+}
+/**
+* Walk up from cwd to find the project root (directory containing astro.config.*).
+*/
+function findProjectRoot$1(from) {
+	let dir = resolve(from);
+	const root = resolve("/");
+	while (dir !== root) {
+		for (const name of [
+			"astro.config.ts",
+			"astro.config.mts",
+			"astro.config.js",
+			"astro.config.mjs"
+		]) if (existsSync(join(dir, name))) return dir;
+		const parent = resolve(dir, "..");
+		if (parent === dir) break;
+		dir = parent;
+	}
+	return null;
+}
+function readStore() {
+	const path = getCredentialPath();
+	try {
+		if (existsSync(path)) {
+			const content = readFileSync(path, "utf-8");
+			return JSON.parse(content);
+		}
+	} catch {}
+	return {};
+}
+function writeStore(store) {
+	mkdirSync(getConfigDir(), {
+		recursive: true,
+		mode: 448
+	});
+	writeFileSync(getCredentialPath(), JSON.stringify(store, null, "	"), {
+		encoding: "utf-8",
+		mode: 384
+	});
+}
+/**
+* Get stored credentials for a URL.
+*/
+function getCredentials(baseUrl) {
+	const key = resolveCredentialKey(baseUrl);
+	const cred = readStore()[key];
+	if (!cred || !("accessToken" in cred)) return null;
+	return cred;
+}
+/**
+* Save credentials for a URL.
+*/
+function saveCredentials(baseUrl, cred) {
+	const key = resolveCredentialKey(baseUrl);
+	const store = readStore();
+	store[key] = cred;
+	writeStore(store);
+}
+/**
+* Remove credentials for a URL.
+*/
+function removeCredentials(baseUrl) {
+	const key = resolveCredentialKey(baseUrl);
+	const store = readStore();
+	if (key in store) {
+		delete store[key];
+		writeStore(store);
+		return true;
+	}
+	return false;
+}
+function marketplaceKey(registryUrl) {
+	try {
+		return `marketplace:${new URL(registryUrl).origin}`;
+	} catch {
+		return `marketplace:${registryUrl}`;
+	}
+}
+/**
+* Get stored marketplace credential for a registry URL.
+*/
+function getMarketplaceCredential(registryUrl) {
+	const key = marketplaceKey(registryUrl);
+	const cred = readStore()[key];
+	if (!cred || !("token" in cred)) return null;
+	if (new Date(cred.expiresAt) < /* @__PURE__ */ new Date()) return null;
+	return cred;
+}
+/**
+* Save marketplace credential for a registry URL.
+*/
+function saveMarketplaceCredential(registryUrl, cred) {
+	const key = marketplaceKey(registryUrl);
+	const store = readStore();
+	store[key] = cred;
+	writeStore(store);
+}
+/**
+* Remove marketplace credential for a registry URL.
+*/
+function removeMarketplaceCredential(registryUrl) {
+	const key = marketplaceKey(registryUrl);
+	const store = readStore();
+	if (key in store) {
+		delete store[key];
+		writeStore(store);
+		return true;
+	}
+	return false;
+}
+
+//#endregion
+//#region src/cli/client-factory.ts
+var client_factory_exports = /* @__PURE__ */ __exportAll({
+	connectionArgs: () => connectionArgs,
+	createClientFromArgs: () => createClientFromArgs
+});
+/**
+* Shared connection args for all CLI commands that talk to an EmDash instance.
+* Spread into each command's `args` definition.
+*/
+const connectionArgs = {
+	url: {
+		type: "string",
+		alias: "u",
+		description: "EmDash instance URL"
+	},
+	token: {
+		type: "string",
+		alias: "t",
+		description: "Auth token"
+	},
+	header: {
+		type: "string",
+		alias: "H",
+		description: "Custom header \"Name: Value\" (repeatable, or use EMDASH_HEADERS env)"
+	},
+	json: {
+		type: "boolean",
+		description: "Output as JSON"
+	}
+};
+/**
+* Create an EmDashClient from CLI args, env vars, and stored credentials.
+*
+* Auth resolution order:
+* 1. --token flag
+* 2. EMDASH_TOKEN env var
+* 3. Stored credentials (~/.config/emdash/auth.json)
+* 4. Dev bypass (if URL is localhost)
+*
+* Custom headers are merged from (in priority order):
+* 1. Stored credentials (persisted during `emdash login --header`)
+* 2. EMDASH_HEADERS env var
+* 3. --header CLI flags
+*/
+function createClientFromArgs(args) {
+	const baseUrl = args.url || process.env["EMDASH_URL"] || "http://localhost:4321";
+	let token = args.token || process.env["EMDASH_TOKEN"];
+	const isLocal = baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1");
+	const cred = !token ? getCredentials(baseUrl) : null;
+	const customHeaders = {
+		...cred?.customHeaders,
+		...resolveCustomHeaders()
+	};
+	const extraInterceptors = [];
+	if (Object.keys(customHeaders).length > 0) extraInterceptors.push(customHeadersInterceptor(customHeaders));
+	if (!token && cred) if (new Date(cred.expiresAt) > /* @__PURE__ */ new Date()) token = cred.accessToken;
+	else return new EmDashClient({
+		baseUrl,
+		token: cred.accessToken,
+		refreshToken: cred.refreshToken,
+		onTokenRefresh: (newAccessToken, expiresIn) => {
+			saveCredentials(baseUrl, {
+				...cred,
+				accessToken: newAccessToken,
+				expiresAt: new Date(Date.now() + expiresIn * 1e3).toISOString()
+			});
+		},
+		interceptors: extraInterceptors
+	});
+	return new EmDashClient({
+		baseUrl,
+		token,
+		devBypass: !token && isLocal,
+		interceptors: extraInterceptors
+	});
+}
+
+//#endregion
+//#region src/cli/output.ts
+/**
+* Redirect consola output to stderr so it doesn't pollute JSON on stdout.
+*
+* Call this early in any command that uses `output()` with `--json`.
+* Safe to call multiple times — only applies the redirect once.
+*/
+function configureOutputMode(args) {
+	if (args.json || !process.stdout.isTTY) {
+		consola$1.options.stdout = process.stderr;
+		consola$1.options.stderr = process.stderr;
+	}
+}
+/**
+* Output data as JSON or pretty-printed.
+*
+* If stdout is not a TTY or --json is set, outputs JSON.
+* Otherwise, outputs a formatted representation.
+*/
+function output(data, args) {
+	if (args.json || !process.stdout.isTTY) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+	else prettyPrint(data);
+}
+function prettyPrint(data, indent = 0) {
+	if (data === null || data === void 0) {
+		consola$1.log("(empty)");
+		return;
+	}
+	if (Array.isArray(data)) {
+		if (data.length === 0) {
+			consola$1.log("(no items)");
+			return;
+		}
+		for (const item of data) {
+			prettyPrint(item, indent);
+			if (indent === 0) consola$1.log("---");
+		}
+		return;
+	}
+	if (typeof data === "object") {
+		const obj = Object(data);
+		if ("items" in obj && Array.isArray(obj.items)) {
+			prettyPrint(obj.items, indent);
+			if (typeof obj.nextCursor === "string") consola$1.log(`\nNext cursor: ${obj.nextCursor}`);
+			return;
+		}
+		const prefix = "  ".repeat(indent);
+		for (const [key, value] of Object.entries(obj)) {
+			if (value === null || value === void 0) continue;
+			if (typeof value === "object" && !Array.isArray(value)) {
+				consola$1.log(`${prefix}${key}:`);
+				prettyPrint(value, indent + 1);
+			} else if (Array.isArray(value)) consola$1.log(`${prefix}${key}: [${value.length} items]`);
+			else {
+				const str = typeof value === "string" ? value : JSON.stringify(value);
+				const display = str.length > 80 ? str.slice(0, 77) + "..." : str;
+				consola$1.log(`${prefix}${key}: ${display}`);
+			}
+		}
+		return;
+	}
+	consola$1.log(typeof data === "string" ? data : JSON.stringify(data));
+}
+
+//#endregion
+//#region src/cli/commands/content.ts
+/**
+* emdash content
+*
+* CRUD commands for managing content items via the EmDash REST API.
+*/
+/** Read content data from --data, --file, or --stdin */
+async function readInputData(args) {
+	if (args.data) try {
+		return JSON.parse(args.data);
+	} catch {
+		throw new Error("Invalid JSON in --data argument");
+	}
+	if (args.file) try {
+		const content = await readFile(args.file, "utf-8");
+		return JSON.parse(content);
+	} catch (error) {
+		if (error instanceof SyntaxError) throw new Error(`Invalid JSON in file: ${args.file}`, { cause: error });
+		throw error;
+	}
+	if (args.stdin) {
+		const chunks = [];
+		for await (const chunk of process.stdin) chunks.push(chunk);
+		const content = Buffer.concat(chunks).toString("utf-8");
+		try {
+			return JSON.parse(content);
+		} catch {
+			throw new Error("Invalid JSON from stdin");
+		}
+	}
+	throw new Error("Provide content data via --data, --file, or --stdin");
+}
+const listCommand$4 = defineCommand({
+	meta: {
+		name: "list",
+		description: "List content items"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		status: {
+			type: "string",
+			description: "Filter by status"
+		},
+		locale: {
+			type: "string",
+			description: "Filter by locale"
+		},
+		limit: {
+			type: "string",
+			description: "Maximum items to return"
+		},
+		cursor: {
+			type: "string",
+			description: "Pagination cursor"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const result = await createClientFromArgs(args).list(args.collection, {
+				status: args.status,
+				locale: args.locale,
+				limit: args.limit ? parseInt(args.limit, 10) : void 0,
+				cursor: args.cursor
+			});
+			output({
+				items: result.items.map((item) => ({
+					id: item.id,
+					slug: item.slug,
+					locale: item.locale,
+					status: item.status,
+					title: typeof item.data?.title === "string" ? item.data.title : void 0,
+					updatedAt: item.updatedAt
+				})),
+				nextCursor: result.nextCursor
+			}, args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const getCommand$3 = defineCommand({
+	meta: {
+		name: "get",
+		description: "Get a single content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		locale: {
+			type: "string",
+			description: "Locale for slug resolution"
+		},
+		raw: {
+			type: "boolean",
+			description: "Return raw Portable Text (skip markdown conversion)"
+		},
+		published: {
+			type: "boolean",
+			description: "Return published data only (ignore pending draft)"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const client = createClientFromArgs(args);
+			const item = await client.get(args.collection, args.id, {
+				raw: args.raw,
+				locale: args.locale
+			});
+			if (!args.published && item.draftRevisionId) {
+				const comparison = await client.compare(args.collection, args.id);
+				if (comparison.hasChanges && comparison.draft) {
+					item.data = comparison.draft;
+					if (!args.raw && item.data) {
+						const fields = (await client.collection(args.collection)).fields.map((f) => ({
+							slug: f.slug,
+							type: f.type
+						}));
+						item.data = convertDataForRead(item.data, fields, false);
+					}
+				}
+			}
+			output(item, args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const createCommand$1 = defineCommand({
+	meta: {
+		name: "create",
+		description: "Create a content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		data: {
+			type: "string",
+			description: "Content data as JSON string"
+		},
+		file: {
+			type: "string",
+			description: "Read content data from a JSON file"
+		},
+		stdin: {
+			type: "boolean",
+			description: "Read content data from stdin"
+		},
+		slug: {
+			type: "string",
+			description: "Content slug"
+		},
+		locale: {
+			type: "string",
+			description: "Content locale"
+		},
+		"translation-of": {
+			type: "string",
+			description: "ID of content item to link as translation"
+		},
+		draft: {
+			type: "boolean",
+			description: "Keep as draft instead of auto-publishing"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const data = await readInputData(args);
+			const client = createClientFromArgs(args);
+			const item = await client.create(args.collection, {
+				data,
+				slug: args.slug,
+				locale: args.locale,
+				translationOf: args["translation-of"]
+			});
+			if (!args.draft) await client.publish(args.collection, item.id);
+			output(await client.get(args.collection, item.id), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const updateCommand = defineCommand({
+	meta: {
+		name: "update",
+		description: "Update a content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		data: {
+			type: "string",
+			description: "Content data as JSON string"
+		},
+		file: {
+			type: "string",
+			description: "Read content data from a JSON file"
+		},
+		rev: {
+			type: "string",
+			description: "Revision token from get (prevents overwriting unseen changes)",
+			required: true
+		},
+		locale: {
+			type: "string",
+			description: "Locale for slug resolution"
+		},
+		draft: {
+			type: "boolean",
+			description: "Keep as draft instead of auto-publishing"
+		},
+		"override-lock": {
+			type: "boolean",
+			description: "Write even though another editor holds this entry's edit lock"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const data = await readInputData(args);
+			const client = createClientFromArgs(args);
+			const updated = await client.update(args.collection, args.id, {
+				data,
+				_rev: args.rev,
+				locale: args.locale,
+				overrideLock: args["override-lock"]
+			});
+			if (!args.draft && updated.draftRevisionId) await client.publish(args.collection, updated.id, { overrideLock: args["override-lock"] });
+			output(await client.get(args.collection, updated.id), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const deleteCommand$2 = defineCommand({
+	meta: {
+		name: "delete",
+		description: "Delete a content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		"override-lock": {
+			type: "boolean",
+			description: "Write even though another editor holds this entry's edit lock"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			await createClientFromArgs(args).delete(args.collection, args.id, { overrideLock: args["override-lock"] });
+			output({ success: true }, args);
+			consola$1.success(`Deleted ${args.collection}/${args.id}`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const publishCommand$1 = defineCommand({
+	meta: {
+		name: "publish",
+		description: "Publish a content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		"override-lock": {
+			type: "boolean",
+			description: "Write even though another editor holds this entry's edit lock"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			await createClientFromArgs(args).publish(args.collection, args.id, { overrideLock: args["override-lock"] });
+			output({ success: true }, args);
+			consola$1.success(`Published ${args.collection}/${args.id}`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const unpublishCommand = defineCommand({
+	meta: {
+		name: "unpublish",
+		description: "Unpublish a content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		"override-lock": {
+			type: "boolean",
+			description: "Write even though another editor holds this entry's edit lock"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			await createClientFromArgs(args).unpublish(args.collection, args.id, { overrideLock: args["override-lock"] });
+			output({ success: true }, args);
+			consola$1.success(`Unpublished ${args.collection}/${args.id}`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const scheduleCommand = defineCommand({
+	meta: {
+		name: "schedule",
+		description: "Schedule content for publishing"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		at: {
+			type: "string",
+			description: "ISO 8601 datetime to publish at",
+			required: true
+		},
+		"override-lock": {
+			type: "boolean",
+			description: "Write even though another editor holds this entry's edit lock"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			await createClientFromArgs(args).schedule(args.collection, args.id, {
+				at: args.at,
+				overrideLock: args["override-lock"]
+			});
+			output({ success: true }, args);
+			consola$1.success(`Scheduled ${args.collection}/${args.id} for ${args.at}`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const restoreCommand = defineCommand({
+	meta: {
+		name: "restore",
+		description: "Restore a trashed content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			await createClientFromArgs(args).restore(args.collection, args.id);
+			output({ success: true }, args);
+			consola$1.success(`Restored ${args.collection}/${args.id}`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const translationsCommand = defineCommand({
+	meta: {
+		name: "translations",
+		description: "List translations for a content item"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		id: {
+			type: "positional",
+			description: "Content item ID or slug",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).translations(args.collection, args.id), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const contentCommand = defineCommand({
+	meta: {
+		name: "content",
+		description: "Manage content"
+	},
+	subCommands: {
+		list: listCommand$4,
+		get: getCommand$3,
+		create: createCommand$1,
+		update: updateCommand,
+		delete: deleteCommand$2,
+		publish: publishCommand$1,
+		unpublish: unpublishCommand,
+		schedule: scheduleCommand,
+		restore: restoreCommand,
+		translations: translationsCommand
+	}
+});
+
+//#endregion
+//#region src/database/connection.ts
+/**
+* Creates a Kysely database instance
+* Supports:
+* - file:./path/to/db.sqlite (local SQLite)
+* - :memory: (in-memory SQLite for testing)
+* - libsql://... (Turso/libSQL with auth token) - TODO
+*/
+function createDatabase(config) {
+	try {
+		if (config.url.startsWith("file:") || config.url === ":memory:") return new Kysely({
+			dialect: new SqliteDialect({ database: openNodeSqliteDatabase(config.url === ":memory:" ? ":memory:" : config.url.replace("file:", ""), { journalMode: "wal" }) }),
+			log: kyselyLogOption()
+		});
+		if (config.url.startsWith("libsql:")) {
+			if (!config.authToken) throw new EmDashDatabaseError("Auth token required for remote libSQL database");
+			throw new EmDashDatabaseError("LibSQL not yet implemented");
+		}
+		throw new EmDashDatabaseError(`Unsupported database URL scheme: ${config.url}`);
+	} catch (error) {
+		if (error instanceof EmDashDatabaseError) throw error;
+		throw new EmDashDatabaseError("Failed to create database", error);
+	}
+}
+
+//#endregion
+//#region src/cli/commands/dev.ts
+/**
+* emdash dev
+*
+* Start development server with optional schema sync from remote
+*/
+async function readPackageJson$2(cwd) {
+	const pkgPath = resolve(cwd, "package.json");
+	try {
+		const content = await readFile(pkgPath, "utf-8");
+		return JSON.parse(content);
+	} catch {
+		return null;
+	}
+}
+async function fileExists$3(path) {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+const DEV_DEPRECATION_MESSAGE = "`emdash dev` is deprecated and will be removed in a future release.\n\nUse your project's dev script instead (for example, `pnpm dev`), or run `astro dev` directly.";
+const devCommand = defineCommand({
+	meta: {
+		name: "dev",
+		description: "Start dev server with local database",
+		hidden: true
+	},
+	args: {
+		database: {
+			type: "string",
+			alias: "d",
+			description: "Database path (default: ./data.db)",
+			default: "./data.db"
+		},
+		types: {
+			type: "boolean",
+			alias: "t",
+			description: "Generate types from remote before starting",
+			default: false
+		},
+		port: {
+			type: "string",
+			alias: "p",
+			description: "Port for dev server",
+			default: "4321"
+		},
+		cwd: {
+			type: "string",
+			description: "Working directory",
+			default: process.cwd()
+		}
+	},
+	async run({ args }) {
+		consola.box({
+			title: "DEPRECATED COMMAND",
+			message: DEV_DEPRECATION_MESSAGE
+		});
+		const cwd = resolve(args.cwd);
+		const pkg = await readPackageJson$2(cwd);
+		if (!pkg) {
+			consola.error("No package.json found");
+			process.exit(1);
+		}
+		const dbPath = resolve(cwd, args.database);
+		if (!await fileExists$3(dbPath)) consola.start("Database not found, initializing...");
+		const db = createDatabase({ url: `file:${dbPath}` });
+		try {
+			consola.start("Checking database migrations...");
+			const { applied } = await runMigrations(db);
+			if (applied.length > 0) consola.success(`Applied ${applied.length} migrations`);
+			else consola.info("Database up to date");
+		} catch (error) {
+			consola.error("Migration failed:", error);
+			await db.destroy();
+			process.exit(1);
+		}
+		await db.destroy();
+		if (args.types) {
+			const remoteUrl = pkg.emdash?.url || process.env.EMDASH_URL;
+			if (!remoteUrl) consola.warn("No remote URL configured. Set EMDASH_URL or emdash.url in package.json");
+			else try {
+				const { createClientFromArgs } = await Promise.resolve().then(() => client_factory_exports);
+				const client = createClientFromArgs({ url: remoteUrl });
+				const schema = await client.schemaExport();
+				const types = await client.schemaTypes();
+				const { mkdir, writeFile } = await import("node:fs/promises");
+				const { dirname, resolve: resolvePath } = await import("node:path");
+				const outputPath = resolvePath(cwd, ".emdash/types.ts");
+				await mkdir(dirname(outputPath), { recursive: true });
+				await writeFile(outputPath, types, "utf-8");
+				await writeFile(resolvePath(dirname(outputPath), "schema.json"), JSON.stringify(schema, null, 2), "utf-8");
+				consola.success(`Generated types for ${schema.collections.length} collections`);
+			} catch (error) {
+				consola.warn("Type generation failed:", error instanceof Error ? error.message : error);
+			}
+		}
+		consola.start("Starting Astro dev server...");
+		const astroArgs = [
+			"astro",
+			"dev",
+			"--port",
+			args.port
+		];
+		const pnpmLockExists = await fileExists$3(resolve(cwd, "pnpm-lock.yaml"));
+		const yarnLockExists = await fileExists$3(resolve(cwd, "yarn.lock"));
+		let cmd;
+		let cmdArgs;
+		if (pnpmLockExists) {
+			cmd = "pnpm";
+			cmdArgs = astroArgs;
+		} else if (yarnLockExists) {
+			cmd = "yarn";
+			cmdArgs = astroArgs;
+		} else {
+			cmd = "npx";
+			cmdArgs = astroArgs;
+		}
+		consola.info(`Running: ${cmd} ${cmdArgs.join(" ")}`);
+		const child = spawn(cmd, cmdArgs, {
+			cwd,
+			stdio: "inherit",
+			env: {
+				...process.env,
+				EMDASH_DATABASE_URL: `file:${dbPath}`
+			}
+		});
+		child.on("error", (error) => {
+			consola.error("Failed to start dev server:", error);
+			process.exit(1);
+		});
+		child.on("exit", (code) => {
+			process.exit(code ?? 0);
+		});
+		const cleanup = () => {
+			child.kill("SIGTERM");
+		};
+		process.on("SIGINT", cleanup);
+		process.on("SIGTERM", cleanup);
+	}
+});
+
+//#endregion
+//#region src/cli/commands/doctor.ts
+/**
+* emdash doctor
+*
+* Diagnose database health (connection, migrations, schema integrity) and
+* Cloudflare Worker scheduler wiring (Cron Trigger + scheduled() handler).
+*/
+const WRANGLER_CONFIG_FILES = [
+	"wrangler.jsonc",
+	"wrangler.json",
+	"wrangler.toml"
+];
+const CLOUDFLARE_WORKER_MODULE = "@emdash-cms/cloudflare/worker";
+const WORKER_FIX = `export { default, PluginBridge } from "${CLOUDFLARE_WORKER_MODULE}";`;
+const MAIN_FIX_JSONC = `"main": "./src/worker.ts"`;
+const MAIN_FIX_TOML = `main = "./src/worker.ts"`;
+const TRIGGER_FIX_JSONC = `"triggers": { "crons": ["* * * * *"] }`;
+const TRIGGER_FIX_TOML = `[triggers]\ncrons = ["* * * * *"]`;
+const SCHEDULED_HANDLER_PATTERN = /\bscheduled\s*:\s*createScheduledHandler\s*\(/m;
+function triggerFix(configPath) {
+	return configPath.endsWith(".toml") ? TRIGGER_FIX_TOML : TRIGGER_FIX_JSONC;
+}
+function mainFix(configPath) {
+	return configPath.endsWith(".toml") ? MAIN_FIX_TOML : MAIN_FIX_JSONC;
+}
+async function fileExists$2(path) {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+function isRecord$2(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function sourcePosition(source, offset) {
+	const prefix = source.slice(0, offset);
+	return {
+		line: prefix.split("\n").length,
+		column: offset - prefix.lastIndexOf("\n")
+	};
+}
+async function findWranglerConfig(cwd) {
+	for (const filename of WRANGLER_CONFIG_FILES) {
+		const path = resolve(cwd, filename);
+		if (await fileExists$2(path)) return path;
+	}
+	return null;
+}
+function workerExportsScheduledMaintenance(source) {
+	const modulePattern = CLOUDFLARE_WORKER_MODULE.replaceAll("/", "\\/");
+	const reExportsWorker = new RegExp(`export\\s*\\{[^}]*\\bdefault\\b[^}]*\\}\\s*from\\s*["']${modulePattern}["']`, "m");
+	const importsFactory = new RegExp(`import\\s+[^;]*\\{[^}]*\\bcreateScheduledHandler\\b[^}]*\\}\\s*from\\s*["']${modulePattern}["']`, "m");
+	return reExportsWorker.test(source) || importsFactory.test(source) && SCHEDULED_HANDLER_PATTERN.test(source);
+}
+async function checkSchedulerWiringAtPath(cwd, configPath) {
+	const configSource = await readFile(configPath, "utf8");
+	let parsed;
+	if (configPath.endsWith(".toml")) try {
+		parsed = parse$2(configSource);
+	} catch (error) {
+		return [{
+			name: "scheduler config",
+			status: "fail",
+			message: `could not parse ${configPath}: ${error instanceof Error ? error.message : "invalid TOML"} — fix the Wrangler configuration syntax`
+		}];
+	}
+	else {
+		const parseErrors = [];
+		parsed = parse$1(configSource, parseErrors, {
+			allowTrailingComma: true,
+			disallowComments: false
+		});
+		if (parseErrors.length > 0) {
+			const error = parseErrors[0];
+			const { line, column } = sourcePosition(configSource, error.offset);
+			return [{
+				name: "scheduler config",
+				status: "fail",
+				message: `could not parse ${configPath}: ${printParseErrorCode(error.error)} at line ${line}, column ${column} — fix the Wrangler configuration syntax`
+			}];
+		}
+	}
+	if (!isRecord$2(parsed)) return [{
+		name: "scheduler config",
+		status: "fail",
+		message: `could not parse ${configPath}: expected an object — fix the Wrangler configuration syntax`
+	}];
+	const triggers = isRecord$2(parsed.triggers) ? parsed.triggers : null;
+	const hasCronTrigger = Array.isArray(triggers?.crons) && triggers.crons.some((cron) => typeof cron === "string" && cron.trim().length > 0);
+	const main = typeof parsed.main === "string" && parsed.main.trim() ? parsed.main : null;
+	if (!main) return [{
+		name: "scheduler handler",
+		status: "fail",
+		message: `Wrangler configuration has no Worker entry to inspect — add ${mainFix(configPath)}, then export: ${WORKER_FIX}`
+	}];
+	const workerPath = resolve(cwd, main);
+	let hasScheduledHandler = false;
+	try {
+		hasScheduledHandler = workerExportsScheduledMaintenance(await readFile(workerPath, "utf8"));
+	} catch (error) {
+		if ((isRecord$2(error) && typeof error.code === "string" ? error.code : null) !== "ENOENT") return [{
+			name: "scheduler handler",
+			status: "fail",
+			message: `could not read Worker entry ${workerPath}: ${error instanceof Error ? error.message : "unknown I/O error"} — check the file path and permissions`
+		}];
+		return [{
+			name: "scheduler handler",
+			status: "fail",
+			message: `Worker entry not found at ${workerPath} — create it with: ${WORKER_FIX}`
+		}];
+	}
+	if (hasCronTrigger && !hasScheduledHandler) return [{
+		name: "scheduler handler",
+		status: "fail",
+		message: `Cron Trigger is configured, but ${main} does not export EmDash scheduled() maintenance — replace its Worker export with: ${WORKER_FIX}`
+	}];
+	if (hasScheduledHandler && !hasCronTrigger) return [{
+		name: "scheduler trigger",
+		status: "fail",
+		message: `EmDash scheduled() handler is exported, but no Cron Trigger is configured — add this to ${configPath}: ${triggerFix(configPath)}`
+	}];
+	if (!hasCronTrigger && !hasScheduledHandler) return [];
+	return [{
+		name: "scheduler wiring",
+		status: "pass",
+		message: `Cron Trigger and scheduled() handler found (${main})`
+	}];
+}
+async function checkDoctor(cwd, dbPath) {
+	const results = await checkDatabase(dbPath);
+	const configPath = await findWranglerConfig(cwd);
+	if (configPath) results.push(...await checkSchedulerWiringAtPath(cwd, configPath));
+	return results;
+}
+function printResult(result) {
+	(result.status === "pass" ? consola.success : result.status === "warn" ? consola.warn : consola.error)(`${result.name}: ${result.message}`);
+}
+async function checkDatabase(dbPath) {
+	const results = [];
+	if (!await fileExists$2(dbPath)) {
+		results.push({
+			name: "database",
+			status: "fail",
+			message: `not found at ${dbPath} — run "emdash init"`
+		});
+		return results;
+	}
+	results.push({
+		name: "database",
+		status: "pass",
+		message: dbPath
+	});
+	let db;
+	try {
+		db = createDatabase({ url: `file:${dbPath}` });
+		const { applied, pending } = await getMigrationStatus(db);
+		if (pending.length === 0) results.push({
+			name: "migrations",
+			status: "pass",
+			message: `${applied.length} applied, none pending`
+		});
+		else results.push({
+			name: "migrations",
+			status: "warn",
+			message: `${applied.length} applied, ${pending.length} pending — run "emdash init"`
+		});
+		const { sql } = await import("kysely");
+		try {
+			const count = (await sql`SELECT COUNT(id) as count FROM _emdash_collections`.execute(db)).rows[0]?.count ?? 0;
+			results.push({
+				name: "collections",
+				status: count > 0 ? "pass" : "warn",
+				message: count > 0 ? `${count} collections defined` : "no collections — seed or create via admin"
+			});
+		} catch {
+			results.push({
+				name: "collections",
+				status: "fail",
+				message: "could not query collections table — migrations may not have run"
+			});
+		}
+		try {
+			const tableNames = await listTablesLike(db, "ec_%");
+			const collectionsResult = await sql`SELECT slug FROM _emdash_collections`.execute(db);
+			const registeredSlugs = new Set(collectionsResult.rows.map((r) => `ec_${r.slug}`));
+			const orphaned = tableNames.filter((name) => !registeredSlugs.has(name));
+			if (orphaned.length > 0) results.push({
+				name: "orphaned tables",
+				status: "warn",
+				message: `found ${orphaned.length}: ${orphaned.join(", ")}`
+			});
+		} catch {}
+		try {
+			const count = (await sql`SELECT COUNT(id) as count FROM users`.execute(db)).rows[0]?.count ?? 0;
+			results.push({
+				name: "users",
+				status: count > 0 ? "pass" : "warn",
+				message: count > 0 ? `${count} users` : "no users — complete setup wizard at /_emdash/admin"
+			});
+		} catch {
+			results.push({
+				name: "users",
+				status: "warn",
+				message: "could not query users table"
+			});
+		}
+	} catch (error) {
+		results.push({
+			name: "database connection",
+			status: "fail",
+			message: error instanceof Error ? error.message : "failed to connect"
+		});
+	} finally {
+		if (db) await db.destroy();
+	}
+	return results;
+}
+const doctorCommand = defineCommand({
+	meta: {
+		name: "doctor",
+		description: "Check database health, scheduler wiring, and diagnose issues"
+	},
+	args: {
+		database: {
+			type: "string",
+			alias: "d",
+			description: "Database path (default: ./data.db)",
+			default: "./data.db"
+		},
+		cwd: {
+			type: "string",
+			description: "Working directory",
+			default: process.cwd()
+		},
+		json: {
+			type: "boolean",
+			description: "Output results as JSON",
+			default: false
+		}
+	},
+	async run({ args }) {
+		const cwd = resolve(args.cwd);
+		const results = await checkDoctor(cwd, resolve(cwd, args.database));
+		const fails = results.filter((result) => result.status === "fail");
+		if (args.json) {
+			process.stdout.write(JSON.stringify(results, null, 2) + "\n");
+			if (fails.length > 0) process.exitCode = 1;
+			return;
+		}
+		consola.start("EmDash Doctor\n");
+		for (const result of results) printResult(result);
+		const warns = results.filter((r) => r.status === "warn");
+		consola.log("");
+		if (fails.length === 0 && warns.length === 0) consola.success("All checks passed");
+		else if (fails.length === 0) consola.info(`All critical checks passed (${warns.length} warnings)`);
+		else {
+			consola.error(`${fails.length} issues found`);
+			process.exitCode = 1;
+		}
+	}
+});
+
+//#endregion
+//#region src/cli/commands/export-seed.ts
+/**
+* emdash export-seed
+*
+* Export current database schema (and optionally content) as a seed file
+*/
+const SETTINGS_PREFIX = "site:";
+const exportSeedCommand = defineCommand({
+	meta: {
+		name: "export-seed",
+		description: "Export database schema and content as a seed file"
+	},
+	args: {
+		database: {
+			type: "string",
+			alias: "d",
+			description: "Database path",
+			default: "./data.db"
+		},
+		cwd: {
+			type: "string",
+			description: "Working directory",
+			default: process.cwd()
+		},
+		"with-content": {
+			type: "string",
+			description: "Include content (all or comma-separated collection names)",
+			required: false
+		},
+		pretty: {
+			type: "boolean",
+			description: "Pretty print JSON output",
+			default: true
+		}
+	},
+	async run({ args }) {
+		const dbPath = resolve(resolve(args.cwd), args.database);
+		consola.info(`Database: ${dbPath}`);
+		const db = createDatabase({ url: `file:${dbPath}` });
+		try {
+			await runMigrations(db);
+		} catch (error) {
+			consola.error("Migration failed:", error);
+			await db.destroy();
+			process.exit(1);
+		}
+		try {
+			const seed = await exportSeed(db, args["with-content"]);
+			const output = args.pretty ? JSON.stringify(seed, null, "	") : JSON.stringify(seed);
+			console.log(output);
+		} catch (error) {
+			consola.error("Export failed:", error);
+			await db.destroy();
+			process.exit(1);
+		}
+		await db.destroy();
+	}
+});
+/**
+* Export database to seed file format
+*/
+async function exportSeed(db, withContent) {
+	const seed = {
+		$schema: "https://emdashcms.com/seed.schema.json",
+		version: "1",
+		meta: {
+			name: "Exported Seed",
+			description: "Exported from existing EmDash database"
+		}
+	};
+	seed.settings = await exportSettings(db);
+	seed.collections = await exportCollections(db);
+	const { i18nEnabled, defaultLocale } = await detectLocaleInfo(db, seed.collections);
+	if (defaultLocale) seed.defaultLocale = defaultLocale;
+	seed.taxonomies = await exportTaxonomies(db, i18nEnabled);
+	seed.menus = await exportMenus(db, i18nEnabled);
+	seed.widgetAreas = await exportWidgetAreas(db);
+	const { bylines, groupToSeedId } = await exportBylines(db);
+	if (bylines.length > 0) seed.bylines = bylines;
+	if (withContent !== void 0) {
+		const collections = withContent === "" || withContent === "true" || withContent === "all" ? null : withContent.split(",").map((s) => s.trim()).filter(Boolean);
+		seed.content = await exportContent(db, seed.collections || [], collections, groupToSeedId, i18nEnabled);
+	}
+	return seed;
+}
+/**
+* Export byline profiles as root-level `bylines[]`.
+*
+* `SeedByline` has no locale axis, so locale siblings of the same byline
+* (sharing a `translation_group`) collapse to a single profile. The returned
+* `groupToSeedId` map keys on `translation_group` — the value stored in
+* `_emdash_content_bylines.byline_id` — so content credits can resolve to the
+* emitted seed id.
+*/
+async function exportBylines(db) {
+	const bylineRepo = new BylineRepository(db);
+	const bylines = [];
+	const groupToSeedId = /* @__PURE__ */ new Map();
+	const usedSeedIds = /* @__PURE__ */ new Set();
+	let cursor;
+	do {
+		const result = await bylineRepo.findMany({
+			limit: 100,
+			cursor
+		});
+		for (const byline of result.items) {
+			const group = byline.translationGroup ?? byline.id;
+			if (groupToSeedId.has(group)) continue;
+			let seedId = `byline:${byline.slug}`;
+			if (usedSeedIds.has(seedId)) seedId = `byline:${byline.slug}:${group}`;
+			usedSeedIds.add(seedId);
+			groupToSeedId.set(group, seedId);
+			bylines.push({
+				id: seedId,
+				slug: byline.slug,
+				displayName: byline.displayName,
+				bio: byline.bio || void 0,
+				websiteUrl: byline.websiteUrl || void 0,
+				isGuest: byline.isGuest || void 0
+			});
+		}
+		cursor = result.nextCursor;
+	} while (cursor);
+	return {
+		bylines,
+		groupToSeedId
+	};
+}
+/**
+* Determine locale-awareness and the data's default locale for the export.
+*
+* The runtime initializes the i18n config in middleware, but the CLI never does,
+* so `isI18nEnabled()` is always false under `emdash export-seed` (#1330). When
+* the flag is unset, fall back to the data: a project is multi-locale when its
+* i18n-aware tables hold rows in more than one distinct locale. `locale` is
+* NOT NULL (defaulting to the site's default locale), so a per-row presence
+* check is not enough — only the *count* of distinct locales distinguishes a
+* genuinely single-locale project from a multi-locale one. This keeps
+* single-locale exports on bare ids and gives multi-locale exports the
+* per-locale suffix they need to avoid duplicate seed ids.
+*
+* `defaultLocale` self-describes the single-locale case so a non-`en` default
+* survives the round-trip (#1421). When more than one locale is present every
+* row already carries its own `locale`, so no fallback is needed and we leave it
+* undefined rather than guess which locale is the "default" without the runtime
+* config.
+*/
+async function detectLocaleInfo(db, collections) {
+	const config = getI18nConfig();
+	if (isI18nEnabled() && config) return {
+		i18nEnabled: true,
+		defaultLocale: config.defaultLocale
+	};
+	const locales = /* @__PURE__ */ new Set();
+	const collectDistinctLocales = async (tableRef) => {
+		const result = await sql`
+			SELECT DISTINCT locale FROM ${tableRef}
+		`.execute(db);
+		for (const row of result.rows) if (row.locale) locales.add(row.locale);
+	};
+	await collectDistinctLocales(sql.ref("_emdash_taxonomy_defs"));
+	await collectDistinctLocales(sql.ref("_emdash_menus"));
+	for (const collection of collections) {
+		validateIdentifier(collection.slug, "collection slug");
+		try {
+			await collectDistinctLocales(sql.ref(`ec_${collection.slug}`));
+		} catch (error) {
+			if (!isMissingTableError(error)) throw error;
+		}
+	}
+	return {
+		i18nEnabled: locales.size > 1,
+		defaultLocale: locales.size === 1 ? [...locales][0] : void 0
+	};
+}
+/**
+* Export site settings
+*/
+async function exportSettings(db) {
+	const allOptions = await new OptionsRepository(db).getByPrefix(SETTINGS_PREFIX);
+	const settings = {};
+	for (const [key, value] of allOptions) {
+		const settingKey = key.replace(SETTINGS_PREFIX, "");
+		settings[settingKey] = value;
+	}
+	return Object.keys(settings).length > 0 ? settings : void 0;
+}
+/**
+* Export collections and their fields
+*/
+async function exportCollections(db) {
+	const registry = new SchemaRegistry(db);
+	const collections = await registry.listCollections();
+	const result = [];
+	for (const collection of collections) {
+		const fields = await registry.listFields(collection.id);
+		const seedCollection = {
+			slug: collection.slug,
+			label: collection.label,
+			labelSingular: collection.labelSingular || void 0,
+			description: collection.description || void 0,
+			icon: collection.icon || void 0,
+			admin: collection.admin,
+			supports: collection.supports.length > 0 ? collection.supports : void 0,
+			urlPattern: collection.urlPattern || void 0,
+			routable: collection.routable === false ? false : void 0,
+			editLocking: collection.editLocking === false ? false : void 0,
+			hidden: collection.hidden || void 0,
+			sortOrder: collection.sortOrder,
+			group: collection.group,
+			fields: fields.map((field) => ({
+				slug: field.slug,
+				label: field.label,
+				type: field.type,
+				required: field.required || void 0,
+				unique: field.unique || void 0,
+				searchable: field.searchable || void 0,
+				indexed: field.indexed || void 0,
+				defaultValue: field.defaultValue,
+				validation: field.validation ? { ...field.validation } : void 0,
+				widget: field.widget || void 0,
+				options: field.options || void 0
+			}))
+		};
+		result.push(seedCollection);
+	}
+	return result;
+}
+/**
+* Export taxonomy definitions and terms
+*/
+async function exportTaxonomies(db, i18nEnabled) {
+	const defs = await db.selectFrom("_emdash_taxonomy_defs").selectAll().orderBy(["name", "locale"]).execute();
+	const result = [];
+	const termRepo = new TaxonomyRepository(db);
+	const defGroupToSeedId = /* @__PURE__ */ new Map();
+	for (const def of defs) {
+		const defSeedId = i18nEnabled && def.locale ? `tax:${def.name}:${def.locale}` : `tax:${def.name}`;
+		const terms = await termRepo.findByName(def.name, { locale: def.locale });
+		const groupToSlug = /* @__PURE__ */ new Map();
+		for (const term of terms) groupToSlug.set(term.translationGroup ?? term.id, term.slug);
+		const termGroupToSeedId = /* @__PURE__ */ new Map();
+		const seedTerms = [];
+		for (const term of terms) {
+			const termSeedId = i18nEnabled && term.locale ? `term:${def.name}:${term.slug}:${term.locale}` : `term:${def.name}:${term.slug}`;
+			const seedTerm = {
+				id: termSeedId,
+				slug: term.slug,
+				label: term.label,
+				description: typeof term.data?.description === "string" ? term.data.description : void 0
+			};
+			if (term.parentId) seedTerm.parent = groupToSlug.get(term.parentId);
+			if (i18nEnabled && term.locale) {
+				seedTerm.locale = term.locale;
+				if (term.translationGroup) {
+					const anchor = termGroupToSeedId.get(term.translationGroup);
+					if (anchor) seedTerm.translationOf = anchor;
+					else termGroupToSeedId.set(term.translationGroup, termSeedId);
+				}
+			}
+			seedTerms.push(seedTerm);
+		}
+		seedTerms.sort((a, b) => Number(!!a.translationOf) - Number(!!b.translationOf));
+		const taxonomy = {
+			id: defSeedId,
+			name: def.name,
+			label: def.label,
+			labelSingular: def.label_singular || void 0,
+			hierarchical: def.hierarchical === 1,
+			collections: def.collections ? JSON.parse(def.collections) : []
+		};
+		if (i18nEnabled && def.locale) {
+			taxonomy.locale = def.locale;
+			if (def.translation_group) {
+				const anchor = defGroupToSeedId.get(def.translation_group);
+				if (anchor) taxonomy.translationOf = anchor;
+				else defGroupToSeedId.set(def.translation_group, defSeedId);
+			}
+		}
+		if (seedTerms.length > 0) taxonomy.terms = seedTerms;
+		result.push(taxonomy);
+	}
+	result.sort((a, b) => Number(!!a.translationOf) - Number(!!b.translationOf));
+	return result;
+}
+/**
+* Export menus with their items
+*/
+async function exportMenus(db, i18nEnabled) {
+	const menus = await db.selectFrom("_emdash_menus").selectAll().orderBy(["name", "locale"]).execute();
+	const result = [];
+	const groupToSeedId = /* @__PURE__ */ new Map();
+	const itemGroupToSeedId = /* @__PURE__ */ new Map();
+	const usedItemSeedIds = /* @__PURE__ */ new Set();
+	for (const menu of menus) {
+		const seedId = i18nEnabled && menu.locale ? `menu:${menu.name}:${menu.locale}` : `menu:${menu.name}`;
+		const seedItems = buildMenuItemTree(await db.selectFrom("_emdash_menu_items").selectAll().where("menu_id", "=", menu.id).orderBy("sort_order", "asc").execute(), {
+			i18nEnabled,
+			menuName: menu.name,
+			menuLocale: menu.locale ?? null,
+			itemGroupToSeedId,
+			usedItemSeedIds
+		});
+		const seedMenu = {
+			id: seedId,
+			name: menu.name,
+			label: menu.label,
+			items: seedItems
+		};
+		if (i18nEnabled && menu.locale) {
+			seedMenu.locale = menu.locale;
+			if (menu.translation_group) {
+				const anchor = groupToSeedId.get(menu.translation_group);
+				if (anchor) seedMenu.translationOf = anchor;
+				else groupToSeedId.set(menu.translation_group, seedId);
+			}
+		}
+		result.push(seedMenu);
+	}
+	result.sort((a, b) => Number(!!a.translationOf) - Number(!!b.translationOf));
+	return result;
+}
+/** Type guard for valid widget types */
+function isWidgetType(t) {
+	return t === "content" || t === "menu" || t === "component";
+}
+/**
+* Build hierarchical menu item tree from flat array
+*/
+function buildMenuItemTree(items, i18nCtx) {
+	const childMap = /* @__PURE__ */ new Map();
+	for (const item of items) {
+		const parentId = item.parent_id;
+		if (!childMap.has(parentId)) childMap.set(parentId, []);
+		childMap.get(parentId).push(item);
+	}
+	function makeSeedId(item) {
+		const base = slugify(item.label || "") || item.id;
+		const locale = i18nCtx.i18nEnabled ? item.locale ?? i18nCtx.menuLocale : null;
+		const candidate = locale ? `item:${i18nCtx.menuName}:${base}:${locale}` : `item:${i18nCtx.menuName}:${base}`;
+		if (!i18nCtx.usedItemSeedIds.has(candidate)) {
+			i18nCtx.usedItemSeedIds.add(candidate);
+			return candidate;
+		}
+		const fallback = locale ? `item:${i18nCtx.menuName}:${base}:${item.id}:${locale}` : `item:${i18nCtx.menuName}:${base}:${item.id}`;
+		i18nCtx.usedItemSeedIds.add(fallback);
+		return fallback;
+	}
+	function buildLevel(parentId) {
+		return (childMap.get(parentId) || []).map((item) => {
+			const seedItem = {
+				type: item.type,
+				label: item.label || void 0
+			};
+			if (item.type === "custom") seedItem.url = item.custom_url || void 0;
+			else {
+				seedItem.ref = item.reference_id || void 0;
+				seedItem.collection = item.reference_collection || void 0;
+			}
+			if (item.target === "_blank") seedItem.target = "_blank";
+			if (item.title_attr) seedItem.titleAttr = item.title_attr;
+			if (item.css_classes) seedItem.cssClasses = item.css_classes;
+			if (i18nCtx.i18nEnabled) {
+				const itemLocale = item.locale ?? i18nCtx.menuLocale;
+				const seedId = makeSeedId(item);
+				seedItem.id = seedId;
+				if (itemLocale) seedItem.locale = itemLocale;
+				if (item.translation_group) {
+					const anchor = i18nCtx.itemGroupToSeedId.get(item.translation_group);
+					if (anchor && anchor !== seedId) seedItem.translationOf = anchor;
+					else if (!anchor) i18nCtx.itemGroupToSeedId.set(item.translation_group, seedId);
+				}
+			}
+			const itemChildren = buildLevel(item.id);
+			if (itemChildren.length > 0) seedItem.children = itemChildren;
+			return seedItem;
+		});
+	}
+	return buildLevel(null);
+}
+/**
+* Export widget areas with their widgets
+*/
+async function exportWidgetAreas(db) {
+	const areas = await db.selectFrom("_emdash_widget_areas").selectAll().execute();
+	const result = [];
+	for (const area of areas) {
+		const seedWidgets = (await db.selectFrom("_emdash_widgets").selectAll().where("area_id", "=", area.id).orderBy("sort_order", "asc").execute()).filter((w) => isWidgetType(w.type)).map((widget) => {
+			const seedWidget = { type: isWidgetType(widget.type) ? widget.type : "content" };
+			if (widget.title) seedWidget.title = widget.title;
+			if (widget.type === "content" && widget.content) seedWidget.content = JSON.parse(widget.content);
+			else if (widget.type === "menu" && widget.menu_name) seedWidget.menuName = widget.menu_name;
+			else if (widget.type === "component") {
+				if (widget.component_id) seedWidget.componentId = widget.component_id;
+				if (widget.component_props) seedWidget.props = JSON.parse(widget.component_props);
+			}
+			return seedWidget;
+		});
+		result.push({
+			name: area.name,
+			label: area.label,
+			description: area.description || void 0,
+			widgets: seedWidgets
+		});
+	}
+	return result;
+}
+/**
+* Export content from collections
+*/
+async function exportContent(db, collections, includeCollections, bylineGroupToSeedId, i18nEnabled) {
+	const content = {};
+	const contentRepo = new ContentRepository(db);
+	const taxonomyRepo = new TaxonomyRepository(db);
+	const mediaRepo = new MediaRepository(db);
+	const mediaMap = /* @__PURE__ */ new Map();
+	try {
+		let cursor;
+		do {
+			const result = await mediaRepo.findMany({
+				limit: 100,
+				cursor,
+				status: "all"
+			});
+			for (const media of result.items) mediaMap.set(media.id, {
+				url: `/_emdash/api/media/file/${media.storageKey}`,
+				filename: media.filename,
+				alt: media.alt || void 0,
+				caption: media.caption || void 0
+			});
+			cursor = result.nextCursor;
+		} while (cursor);
+	} catch {}
+	for (const collection of collections) {
+		if (includeCollections && !includeCollections.includes(collection.slug)) continue;
+		const entries = [];
+		let cursor;
+		const translationGroupToSeedId = /* @__PURE__ */ new Map();
+		do {
+			const result = await contentRepo.findMany(collection.slug, {
+				limit: 100,
+				cursor
+			});
+			for (const item of result.items) {
+				const seedId = item.slug ? i18nEnabled && item.locale ? `${collection.slug}:${item.slug}:${item.locale}` : `${collection.slug}:${item.slug}` : item.id;
+				const processedData = processDataForExport(item.data, collection.fields, mediaMap);
+				const entry = {
+					id: seedId,
+					slug: item.slug?.trim() ? item.slug : collection.routable === false ? void 0 : item.id,
+					status: item.status === "published" || item.status === "draft" ? item.status : void 0,
+					data: processedData
+				};
+				if (i18nEnabled && item.locale) {
+					entry.locale = item.locale;
+					if (item.translationGroup) {
+						const sourceSeedId = translationGroupToSeedId.get(item.translationGroup);
+						if (sourceSeedId) entry.translationOf = sourceSeedId;
+						else translationGroupToSeedId.set(item.translationGroup, seedId);
+					}
+				}
+				const taxonomies = await getTaxonomyAssignments(taxonomyRepo, collection.slug, item.id);
+				if (Object.keys(taxonomies).length > 0) entry.taxonomies = taxonomies;
+				const bylines = await getBylineCredits(db, collection.slug, item.id, bylineGroupToSeedId);
+				if (bylines.length > 0) entry.bylines = bylines;
+				entries.push(entry);
+			}
+			cursor = result.nextCursor;
+		} while (cursor);
+		if (i18nEnabled && entries.length > 0) entries.sort((a, b) => {
+			if (a.translationOf && !b.translationOf) return 1;
+			if (!a.translationOf && b.translationOf) return -1;
+			return 0;
+		});
+		if (entries.length > 0) content[collection.slug] = entries;
+	}
+	return content;
+}
+/**
+* Process content data for export, converting image fields to $media syntax
+*/
+function processDataForExport(data, fields, mediaMap) {
+	const result = {};
+	const fieldTypes = /* @__PURE__ */ new Map();
+	for (const field of fields) fieldTypes.set(field.slug, field.type);
+	for (const [key, value] of Object.entries(data)) {
+		const fieldType = fieldTypes.get(key);
+		if (fieldType === "image" && value && typeof value === "object") {
+			const imageValue = value;
+			if (imageValue.id) {
+				const mediaInfo = mediaMap.get(imageValue.id);
+				if (mediaInfo) {
+					result[key] = { $media: {
+						url: mediaInfo.url,
+						filename: mediaInfo.filename,
+						alt: imageValue.alt || mediaInfo.alt,
+						caption: mediaInfo.caption
+					} };
+					continue;
+				}
+			}
+			result[key] = value;
+		} else if (fieldType === "reference" && typeof value === "string") result[key] = `$ref:${value}`;
+		else if (Array.isArray(value)) result[key] = value.map((item) => {
+			if (typeof item === "string" && fieldType === "reference") return `$ref:${item}`;
+			return item;
+		});
+		else result[key] = value;
+	}
+	return result;
+}
+/**
+* Get ordered byline credits for a content entry as `SeedBylineCredit[]`.
+*
+* The `_emdash_content_bylines.byline_id` column stores the credited byline's
+* `translation_group`, so it maps straight through `groupToSeedId`. Credits
+* whose group wasn't emitted in the root `bylines[]` are skipped (defensive;
+* shouldn't happen for a consistent DB).
+*/
+async function getBylineCredits(db, collection, entryId, groupToSeedId) {
+	const rows = await db.selectFrom("_emdash_content_bylines").select(["byline_id", "role_label"]).where("collection_slug", "=", collection).where("content_id", "=", entryId).orderBy("sort_order", "asc").execute();
+	const credits = [];
+	for (const row of rows) {
+		const seedId = groupToSeedId.get(row.byline_id);
+		if (!seedId) continue;
+		const credit = { byline: seedId };
+		if (row.role_label) credit.roleLabel = row.role_label;
+		credits.push(credit);
+	}
+	return credits;
+}
+/**
+* Get taxonomy term assignments for a content entry
+*/
+async function getTaxonomyAssignments(taxonomyRepo, collection, entryId) {
+	const terms = await taxonomyRepo.getTermsForEntry(collection, entryId);
+	const result = {};
+	for (const term of terms) {
+		if (!result[term.name]) result[term.name] = [];
+		result[term.name].push(term.slug);
+	}
+	return result;
+}
+
+//#endregion
+//#region src/cli/commands/init.ts
+/**
+* emdash init
+*
+* Initialize database from template config in package.json
+*/
+async function fileExists$1(path) {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+async function readPackageJson$1(cwd) {
+	const pkgPath = resolve(cwd, "package.json");
+	try {
+		const content = await readFile(pkgPath, "utf-8");
+		return JSON.parse(content);
+	} catch {
+		return null;
+	}
+}
+async function runSqlFile(db, filePath) {
+	const statements = (await readFile(filePath, "utf-8")).split("\n").filter((line) => !line.trim().startsWith("--")).join("\n").split(";").map((s) => s.trim()).filter((s) => s.length > 0);
+	for (const statement of statements) await db.executeQuery(sql.raw(statement).compile(db));
+}
+/**
+* Check if database has already been initialized with template schema
+*/
+async function isAlreadyInitialized(db) {
+	try {
+		const row = (await sql`SELECT COUNT(id) as count FROM _emdash_collections`.execute(db)).rows[0];
+		return row ? row.count > 0 : false;
+	} catch {
+		return false;
+	}
+}
+const initCommand = defineCommand({
+	meta: {
+		name: "init",
+		description: "Initialize database from template config"
+	},
+	args: {
+		database: {
+			type: "string",
+			alias: "d",
+			description: "Database path (default: ./data.db)",
+			default: "./data.db"
+		},
+		cwd: {
+			type: "string",
+			description: "Working directory",
+			default: process.cwd()
+		},
+		force: {
+			type: "boolean",
+			alias: "f",
+			description: "Force re-initialization",
+			default: false
+		}
+	},
+	async run({ args }) {
+		const cwd = resolve(args.cwd);
+		consola.start("Initializing EmDash...");
+		const pkg = await readPackageJson$1(cwd);
+		if (!pkg) {
+			consola.error("No package.json found in", cwd);
+			process.exit(1);
+		}
+		const config = pkg.emdash;
+		consola.info(`Project: ${pkg.name || "unknown"}`);
+		if (config?.label) consola.info(`Template: ${config.label}`);
+		const dbPath = resolve(cwd, args.database);
+		consola.info(`Database: ${dbPath}`);
+		const db = createDatabase({ url: `file:${dbPath}` });
+		consola.start("Running migrations...");
+		try {
+			const { applied } = await runMigrations(db);
+			if (applied.length > 0) {
+				consola.success(`Applied ${applied.length} migrations`);
+				for (const name of applied) consola.info(`  - ${name}`);
+			} else consola.info("Migrations already up to date");
+		} catch (error) {
+			consola.error("Migration failed:", error);
+			await db.destroy();
+			process.exit(1);
+		}
+		const alreadyInitialized = await isAlreadyInitialized(db);
+		if (alreadyInitialized && !args.force) {
+			await db.destroy();
+			consola.success("Already initialized. Use --force to re-run schema/seed.");
+			return;
+		}
+		if (alreadyInitialized && args.force) consola.warn("Re-initializing (--force)...");
+		if (config?.schema) {
+			const schemaPath = resolve(cwd, config.schema);
+			if (await fileExists$1(schemaPath)) {
+				consola.start(`Running schema: ${config.schema}`);
+				try {
+					await runSqlFile(db, schemaPath);
+					consola.success("Schema applied");
+				} catch (error) {
+					consola.error("Schema failed:", error);
+					await db.destroy();
+					process.exit(1);
+				}
+			} else consola.warn(`Schema file not found: ${config.schema}`);
+		}
+		await db.destroy();
+		consola.success("EmDash initialized successfully!");
+		consola.info("Run `pnpm dev` to start the development server");
+	}
+});
+
+//#endregion
+//#region src/cli/commands/login.ts
+/**
+* Login/logout/whoami CLI commands
+*
+* Login uses the OAuth Device Flow (RFC 8628):
+* 1. POST /oauth/device/code → get device_code + user_code
+* 2. Display URL + code to user
+* 3. Poll POST /oauth/device/token until authorized
+* 4. Save tokens to ~/.config/emdash/auth.json
+*
+* Custom headers (--header / EMDASH_HEADERS) are sent with every request
+* and persisted to credentials so subsequent commands inherit them.
+* This supports sites behind reverse proxies like Cloudflare Access.
+*/
+async function pollForToken(tokenEndpoint, deviceCode, interval, expiresIn, fetchFn) {
+	const deadline = Date.now() + expiresIn * 1e3;
+	let currentInterval = interval;
+	while (Date.now() < deadline) {
+		await new Promise((resolve) => setTimeout(resolve, currentInterval * 1e3));
+		const res = await fetchFn(tokenEndpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				device_code: deviceCode,
+				grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+			})
+		});
+		if (res.ok) return (await res.json()).data;
+		const body = await res.json();
+		if (body.error === "authorization_pending") continue;
+		if (body.error === "slow_down") {
+			currentInterval = body.interval ?? currentInterval + 5;
+			continue;
+		}
+		if (body.error === "expired_token") throw new Error("Device code expired. Please try again.");
+		if (body.error === "access_denied") throw new Error("Authorization was denied.");
+		throw new Error(`Token exchange failed: ${body.error || res.statusText}`);
+	}
+	throw new Error("Device code expired (timeout). Please try again.");
+}
+/**
+* Handle a Cloudflare Access redirect during login.
+*
+* 1. Try `cloudflared access token` for a cached JWT
+* 2. Try `cloudflared access login` to do the browser flow
+* 3. If cloudflared isn't available, print instructions for service tokens
+*
+* Returns the Access JWT, or null if auth couldn't be resolved.
+*/
+async function handleAccessRedirect(baseUrl) {
+	consola$1.info("This site is behind Cloudflare Access.");
+	const cached = await getCachedAccessToken(baseUrl);
+	if (cached) {
+		consola$1.success("Using cached Cloudflare Access token from cloudflared.");
+		return cached;
+	}
+	consola$1.info("Launching browser for Cloudflare Access login...");
+	if (await runCloudflaredLogin(baseUrl)) {
+		const token = await getCachedAccessToken(baseUrl);
+		if (token) {
+			consola$1.success("Cloudflare Access authentication successful.");
+			return token;
+		}
+	}
+	console.log();
+	consola$1.info("Could not authenticate with Cloudflare Access automatically.");
+	consola$1.info("You have two options:");
+	console.log();
+	consola$1.info(`  ${pc.bold("Option 1:")} Install cloudflared and run:`);
+	console.log(`    ${pc.cyan(`cloudflared access login ${baseUrl}`)}`);
+	console.log(`    ${pc.cyan(`emdash login --url ${baseUrl}`)}`);
+	console.log();
+	consola$1.info(`  ${pc.bold("Option 2:")} Use a service token:`);
+	console.log(`    ${pc.cyan(`emdash login --url ${baseUrl} -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>"`)}`);
+	console.log();
+	return null;
+}
+const loginCommand = defineCommand({
+	meta: {
+		name: "login",
+		description: "Log in to an EmDash instance"
+	},
+	args: {
+		url: {
+			type: "string",
+			alias: "u",
+			description: "EmDash instance URL",
+			default: "http://localhost:4321"
+		},
+		header: {
+			type: "string",
+			alias: "H",
+			description: "Custom header \"Name: Value\" (repeatable, or use EMDASH_HEADERS env)"
+		}
+	},
+	async run({ args }) {
+		const baseUrl = args.url || "http://localhost:4321";
+		consola$1.start(`Connecting to ${baseUrl}...`);
+		const customHeaders = resolveCustomHeaders();
+		let headerFetch = createHeaderAwareFetch(customHeaders);
+		try {
+			const discoveryUrl = new URL("/_emdash/.well-known/auth", baseUrl);
+			let res = await headerFetch(discoveryUrl, { redirect: "manual" });
+			if (isAccessRedirect(res)) {
+				const accessToken = await handleAccessRedirect(baseUrl);
+				if (!accessToken) return;
+				customHeaders["cf-access-token"] = accessToken;
+				headerFetch = createHeaderAwareFetch(customHeaders);
+				res = await headerFetch(discoveryUrl);
+			} else if (res.status === 301 || res.status === 302) res = await headerFetch(discoveryUrl);
+			if (!res.ok) {
+				if (res.status === 404) {
+					if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) {
+						consola$1.info("Auth discovery not available. Trying dev bypass...");
+						const bypassRes = await fetch(new URL("/_emdash/api/auth/dev-bypass", baseUrl), { redirect: "manual" });
+						if (bypassRes.status === 302 || bypassRes.ok) consola$1.success("Dev bypass available. Client will authenticate automatically.");
+						else consola$1.error("Could not authenticate. Is the dev server running?");
+					} else consola$1.error("Auth discovery endpoint not found. Is this an EmDash instance?");
+					return;
+				}
+				consola$1.error(`Discovery failed: ${res.status} ${res.statusText}`);
+				process.exit(2);
+			}
+			const discovery = await res.json();
+			consola$1.success(`Connected to ${discovery.instance?.name || "EmDash"}`);
+			const deviceFlow = discovery.auth?.methods?.device_flow;
+			if (!deviceFlow) {
+				consola$1.info("Device Flow is not available for this instance.");
+				consola$1.info("Generate an API token in Settings > API Tokens");
+				consola$1.info(`Then run: ${pc.cyan(`emdash --token <token> --url ${baseUrl}`)}`);
+				return;
+			}
+			const codeUrl = new URL(deviceFlow.device_authorization_endpoint, baseUrl);
+			const codeRes = await headerFetch(codeUrl, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-EmDash-Request": "1"
+				},
+				body: JSON.stringify({
+					client_id: "emdash-cli",
+					scope: "admin"
+				})
+			});
+			if (!codeRes.ok) {
+				consola$1.error(`Failed to request device code: ${codeRes.status}`);
+				process.exit(2);
+			}
+			const deviceCode = (await codeRes.json()).data;
+			console.log();
+			consola$1.info(`Open your browser to:`);
+			console.log(`  ${pc.cyan(pc.bold(deviceCode.verification_uri))}`);
+			console.log();
+			consola$1.info(`Enter code: ${pc.yellow(pc.bold(deviceCode.user_code))}`);
+			console.log();
+			try {
+				const { execFile } = await import("node:child_process");
+				if (process.platform === "darwin") execFile("open", [deviceCode.verification_uri]);
+				else if (process.platform === "win32") execFile("cmd", [
+					"/c",
+					"start",
+					"",
+					deviceCode.verification_uri
+				]);
+				else execFile("xdg-open", [deviceCode.verification_uri]);
+			} catch {}
+			consola$1.start("Waiting for authorization...");
+			const tokenResult = await pollForToken(new URL(deviceFlow.token_endpoint, baseUrl).toString(), deviceCode.device_code, deviceCode.interval, deviceCode.expires_in, headerFetch);
+			let userEmail = "unknown";
+			let userRole = "unknown";
+			try {
+				const meRes = await headerFetch(new URL("/_emdash/api/auth/me", baseUrl), { headers: { Authorization: `Bearer ${tokenResult.access_token}` } });
+				if (meRes.ok) {
+					const me = (await meRes.json()).data;
+					userEmail = me.email || "unknown";
+					userRole = (me.role ? {
+						10: "subscriber",
+						20: "contributor",
+						30: "author",
+						40: "editor",
+						50: "admin"
+					}[me.role] : void 0) || "unknown";
+				}
+			} catch {}
+			const expiresAt = new Date(Date.now() + tokenResult.expires_in * 1e3).toISOString();
+			const hasCustomHeaders = Object.keys(customHeaders).length > 0;
+			saveCredentials(baseUrl, {
+				accessToken: tokenResult.access_token,
+				refreshToken: tokenResult.refresh_token,
+				expiresAt,
+				...hasCustomHeaders ? { customHeaders } : {},
+				user: {
+					email: userEmail,
+					role: userRole
+				}
+			});
+			consola$1.success(`Logged in as ${pc.bold(userEmail)} (${userRole})`);
+			consola$1.info(`Token saved to ${pc.dim(resolveCredentialKey(baseUrl))}`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Login failed");
+			process.exit(2);
+		}
+	}
+});
+const logoutCommand = defineCommand({
+	meta: {
+		name: "logout",
+		description: "Log out of an EmDash instance"
+	},
+	args: { url: {
+		type: "string",
+		alias: "u",
+		description: "EmDash instance URL",
+		default: "http://localhost:4321"
+	} },
+	async run({ args }) {
+		const baseUrl = args.url || "http://localhost:4321";
+		const cred = getCredentials(baseUrl);
+		if (!cred) {
+			consola$1.info("No stored credentials found for this instance.");
+			return;
+		}
+		const headerFetch = createHeaderAwareFetch(cred.customHeaders ?? {});
+		try {
+			await headerFetch(new URL("/_emdash/api/oauth/token/revoke", baseUrl), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ token: cred.refreshToken })
+			});
+		} catch {}
+		removeCredentials(baseUrl);
+		consola$1.success("Logged out successfully.");
+	}
+});
+const whoamiCommand = defineCommand({
+	meta: {
+		name: "whoami",
+		description: "Show current user and auth method"
+	},
+	args: {
+		url: {
+			type: "string",
+			alias: "u",
+			description: "EmDash instance URL",
+			default: "http://localhost:4321"
+		},
+		token: {
+			type: "string",
+			alias: "t",
+			description: "Auth token"
+		},
+		json: {
+			type: "boolean",
+			description: "Output as JSON"
+		}
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		const baseUrl = args.url || "http://localhost:4321";
+		let token = args.token || process.env["EMDASH_TOKEN"];
+		let authMethod = token ? "token" : "none";
+		let storedHeaders = {};
+		if (!token) {
+			const cred = getCredentials(baseUrl);
+			if (cred) {
+				token = cred.accessToken;
+				authMethod = "stored";
+				storedHeaders = cred.customHeaders ?? {};
+				if (new Date(cred.expiresAt) < /* @__PURE__ */ new Date()) {
+					const headerFetch = createHeaderAwareFetch(storedHeaders);
+					try {
+						const refreshRes = await headerFetch(new URL("/_emdash/api/oauth/token/refresh", baseUrl), {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								refresh_token: cred.refreshToken,
+								grant_type: "refresh_token"
+							})
+						});
+						if (refreshRes.ok) {
+							const json = await refreshRes.json();
+							const refreshed = json.data && typeof json.data === "object" && "access_token" in json.data ? json.data : json;
+							token = refreshed.access_token;
+							saveCredentials(baseUrl, {
+								...cred,
+								accessToken: refreshed.access_token,
+								expiresAt: new Date(Date.now() + refreshed.expires_in * 1e3).toISOString()
+							});
+						} else {
+							consola$1.warn("Stored token expired and refresh failed. Run: emdash login");
+							process.exit(2);
+						}
+					} catch {
+						consola$1.warn("Stored token expired. Run: emdash login");
+						process.exit(2);
+					}
+				}
+			}
+		}
+		if (!token) {
+			if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) {
+				authMethod = "dev-bypass";
+				consola$1.info(`Auth method: ${pc.cyan("dev-bypass")}`);
+				consola$1.info("No stored credentials. Client will use dev bypass for localhost.");
+				return;
+			}
+			consola$1.error("Not logged in. Run: emdash login");
+			process.exit(2);
+		}
+		const headerFetch = createHeaderAwareFetch(storedHeaders);
+		try {
+			const meRes = await headerFetch(new URL("/_emdash/api/auth/me", baseUrl), { headers: { Authorization: `Bearer ${token}` } });
+			if (!meRes.ok) {
+				if (meRes.status === 401) {
+					consola$1.error("Token is invalid or expired. Run: emdash login");
+					process.exit(1);
+				}
+				consola$1.error(`Failed to fetch user info: ${meRes.status}`);
+				process.exit(1);
+			}
+			const me = (await meRes.json()).data;
+			const roleNames = {
+				10: "subscriber",
+				20: "contributor",
+				30: "author",
+				40: "editor",
+				50: "admin"
+			};
+			if (args.json) console.log(JSON.stringify({
+				id: me.id,
+				email: me.email,
+				name: me.name,
+				role: roleNames[me.role] || `unknown (${me.role})`,
+				authMethod,
+				url: baseUrl
+			}));
+			else {
+				consola$1.info(`Email: ${pc.bold(me.email)}`);
+				if (me.name) consola$1.info(`Name:  ${me.name}`);
+				consola$1.info(`Role:  ${pc.cyan(roleNames[me.role] || `unknown (${me.role})`)}`);
+				consola$1.info(`Auth:  ${pc.dim(authMethod)}`);
+				consola$1.info(`URL:   ${pc.dim(baseUrl)}`);
+			}
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+
+//#endregion
+//#region src/cli/commands/media.ts
+/**
+* emdash media
+*
+* Manage media items via the EmDash API
+*/
+const repairScopeError = "Specify exactly one of --collection or --all";
+const listCommand$3 = defineCommand({
+	meta: {
+		name: "list",
+		description: "List media items"
+	},
+	args: {
+		...connectionArgs,
+		mime: {
+			type: "string",
+			description: "Filter by MIME type (e.g., image/png)"
+		},
+		limit: {
+			type: "string",
+			description: "Number of items to return"
+		},
+		cursor: {
+			type: "string",
+			description: "Pagination cursor"
+		}
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		const client = createClientFromArgs(args);
+		try {
+			output(await client.mediaList({
+				mimeType: args.mime,
+				limit: args.limit ? Number(args.limit) : void 0,
+				cursor: args.cursor
+			}), args);
+		} catch (error) {
+			consola$1.error("Failed to list media:", error instanceof Error ? error.message : error);
+			process.exit(1);
+		}
+	}
+});
+const uploadCommand = defineCommand({
+	meta: {
+		name: "upload",
+		description: "Upload a media file"
+	},
+	args: {
+		file: {
+			type: "positional",
+			description: "Path to the file to upload",
+			required: true
+		},
+		...connectionArgs,
+		alt: {
+			type: "string",
+			description: "Alt text for the media item"
+		},
+		caption: {
+			type: "string",
+			description: "Caption for the media item"
+		}
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		const client = createClientFromArgs(args);
+		const filename = basename(args.file);
+		consola$1.start(`Uploading ${filename}...`);
+		try {
+			const buffer = await readFile(args.file);
+			const result = await client.mediaUpload(buffer, filename, {
+				alt: args.alt,
+				caption: args.caption
+			});
+			consola$1.success(`Uploaded ${filename}`);
+			output(result, args);
+		} catch (error) {
+			consola$1.error("Failed to upload:", error instanceof Error ? error.message : error);
+			process.exit(1);
+		}
+	}
+});
+const getCommand$2 = defineCommand({
+	meta: {
+		name: "get",
+		description: "Get a media item"
+	},
+	args: {
+		id: {
+			type: "positional",
+			description: "Media item ID",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		const client = createClientFromArgs(args);
+		try {
+			output(await client.mediaGet(args.id), args);
+		} catch (error) {
+			consola$1.error("Failed to get media:", error instanceof Error ? error.message : error);
+			process.exit(1);
+		}
+	}
+});
+const deleteCommand$1 = defineCommand({
+	meta: {
+		name: "delete",
+		description: "Delete a media item"
+	},
+	args: {
+		id: {
+			type: "positional",
+			description: "Media item ID",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		const client = createClientFromArgs(args);
+		try {
+			await client.mediaDelete(args.id);
+			if (args.json) output({ deleted: true }, args);
+			else consola$1.success(`Deleted media item ${args.id}`);
+		} catch (error) {
+			consola$1.error("Failed to delete media:", error instanceof Error ? error.message : error);
+			process.exit(1);
+		}
+	}
+});
+const repairUsageCommand = defineCommand({
+	meta: {
+		name: "repair-usage",
+		description: "Repair content media usage indexes. partial/stale exit 0; automation should use --json and parse status."
+	},
+	args: {
+		...connectionArgs,
+		collection: {
+			type: "string",
+			alias: "c",
+			description: "Repair one content collection"
+		},
+		all: {
+			type: "boolean",
+			description: "Repair every content collection"
+		}
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		const hasCollectionArg = args.collection !== void 0;
+		const hasCollection = typeof args.collection === "string";
+		const hasAll = args.all === true;
+		if (hasCollectionArg && !hasCollection || hasCollection === hasAll) {
+			consola$1.error(repairScopeError);
+			process.exit(1);
+		}
+		const client = createClientFromArgs(args);
+		try {
+			const repairInput = hasCollection ? {
+				scope: "collection",
+				collection: args.collection
+			} : { scope: "all" };
+			const result = await client.mediaRepairUsage(repairInput);
+			if (args.json || !process.stdout.isTTY) output(result, args);
+			else printRepairUsageSummary(result, repairInput);
+			if (result.status === "failed") process.exitCode = 1;
+		} catch (error) {
+			consola$1.error("Failed to repair media usage:", error instanceof Error ? error.message : error);
+			process.exit(1);
+		}
+	}
+});
+function formatRepairUsageSummary(result, input) {
+	const counts = `indexed ${result.indexedSourceCount}, failed ${result.failedSourceCount}, skipped ${result.skippedSourceCount}, deleted ${result.deletedSourceCount}`;
+	const scope = input.scope === "collection" ? `collection ${input.collection}` : `all content (${formatCollectionCount(result.collections.length)})`;
+	if (result.status === "complete") return {
+		level: "success",
+		message: `Media usage repair complete for ${scope} (${counts}).`
+	};
+	const details = result.collections.filter((collection) => collection.status !== "complete").map((collection) => {
+		const error = collection.lastErrorCode ? `, ${collection.lastErrorCode}` : "";
+		return `${collection.collection}: ${collection.status}${error}`;
+	}).join("; ");
+	const suffix = details ? ` ${details}.` : "";
+	if (result.status === "stale") return {
+		level: "warn",
+		message: `Media usage repair is stale for ${scope}; trustworthy complete coverage was not established because another writer, repair, or stale marker won the race. Rerun when writes are quiet (${counts}).${suffix}`
+	};
+	if (result.status === "partial") return {
+		level: "warn",
+		message: `Media usage repair is partial for ${scope}; some sources or collections need attention (${counts}).${suffix}`
+	};
+	return {
+		level: "warn",
+		message: `Media usage repair failed for ${scope} (${counts}).${suffix}`
+	};
+}
+function printRepairUsageSummary(result, input) {
+	const summary = formatRepairUsageSummary(result, input);
+	if (summary.level === "success") consola$1.success(summary.message);
+	else consola$1.warn(summary.message);
+}
+function formatCollectionCount(count) {
+	return `${count} collection${count === 1 ? "" : "s"}`;
+}
+const mediaCommand = defineCommand({
+	meta: {
+		name: "media",
+		description: "Manage media items"
+	},
+	subCommands: {
+		list: listCommand$3,
+		upload: uploadCommand,
+		get: getCommand$2,
+		delete: deleteCommand$1,
+		"repair-usage": repairUsageCommand
+	}
+});
+
+//#endregion
+//#region src/cli/commands/menu.ts
+/**
+* emdash menu
+*
+* Manage menus via the EmDash REST API.
+*/
+const listCommand$2 = defineCommand({
+	meta: {
+		name: "list",
+		description: "List all menus"
+	},
+	args: { ...connectionArgs },
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).menus(), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const getCommand$1 = defineCommand({
+	meta: {
+		name: "get",
+		description: "Get a menu with its items"
+	},
+	args: {
+		name: {
+			type: "positional",
+			description: "Menu name",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).menu(args.name), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const menuCommand = defineCommand({
+	meta: {
+		name: "menu",
+		description: "Manage menus"
+	},
+	subCommands: {
+		list: listCommand$2,
+		get: getCommand$1
+	}
+});
+
+//#endregion
+//#region src/migrations/config-loader.ts
+const ASTRO_CONFIG_FILENAMES = [
+	"astro.config.mjs",
+	"astro.config.js",
+	"astro.config.ts",
+	"astro.config.mts"
+];
+var MigrationConfigLoaderError = class extends Error {
+	constructor(message, options) {
+		super(message, options);
+		this.name = "MigrationConfigLoaderError";
+	}
+};
+async function isAccessible(path) {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+async function findAstroConfigFile(projectRoot, configFile) {
+	const root = resolve(projectRoot);
+	if (configFile) {
+		const explicitPath = isAbsolute(configFile) ? configFile : resolve(root, configFile);
+		if (await isAccessible(explicitPath)) return explicitPath;
+		throw new MigrationConfigLoaderError(`Astro config file not found: ${explicitPath}`);
+	}
+	for (const filename of ASTRO_CONFIG_FILENAMES) {
+		const candidate = resolve(root, filename);
+		if (await isAccessible(candidate)) return candidate;
+	}
+	throw new MigrationConfigLoaderError(`No Astro config file found in ${root}`);
+}
+function projectRequire(projectRoot) {
+	return createRequire(resolve(projectRoot, "package.json"));
+}
+async function importModule(path) {
+	return import(pathToFileURL(path).href);
+}
+function isRecord$1(value) {
+	return typeof value === "object" && value !== null;
+}
+function moduleExport$1(module, name) {
+	if (!isRecord$1(module)) return void 0;
+	const direct = module[name];
+	if (direct !== void 0) return direct;
+	const defaultExport = module.default;
+	return isRecord$1(defaultExport) ? defaultExport[name] : void 0;
+}
+function isCoreMigrationIdentity(value) {
+	return isRecord$1(value) && typeof value.emdashVersion === "string" && Array.isArray(value.names) && value.names.every((name) => typeof name === "string") && typeof value.fingerprint === "string";
+}
+async function loadProjectConfig(projectRoot, configFile) {
+	let viteEntrypoint;
+	try {
+		viteEntrypoint = createRequire(projectRequire(projectRoot).resolve("astro")).resolve("vite");
+	} catch (error) {
+		throw new MigrationConfigLoaderError("Could not resolve Vite through the project's Astro installation", { cause: error });
+	}
+	const loadConfigFromFile = moduleExport$1(await importModule(viteEntrypoint), "loadConfigFromFile");
+	if (typeof loadConfigFromFile !== "function") throw new MigrationConfigLoaderError("The Vite installation used by project-local Astro does not export loadConfigFromFile");
+	const loaded = await Reflect.apply(loadConfigFromFile, void 0, [
+		{
+			command: "build",
+			mode: "production"
+		},
+		configFile,
+		projectRoot,
+		"silent"
+	]);
+	if (!isRecord$1(loaded) || !Object.hasOwn(loaded, "config")) throw new MigrationConfigLoaderError(`Vite could not load Astro config: ${configFile}`);
+	return loaded.config;
+}
+async function loadProjectIdentity(projectRoot) {
+	let identityEntrypoint;
+	try {
+		identityEntrypoint = projectRequire(projectRoot).resolve("emdash/migrations");
+	} catch (error) {
+		throw new MigrationConfigLoaderError("Could not resolve emdash/migrations from the project", { cause: error });
+	}
+	const getIdentity = moduleExport$1(await importModule(identityEntrypoint), "getCoreMigrationIdentity");
+	if (typeof getIdentity !== "function") throw new MigrationConfigLoaderError("The project-local emdash/migrations module does not export getCoreMigrationIdentity");
+	const identity = await Reflect.apply(getIdentity, void 0, []);
+	if (!isCoreMigrationIdentity(identity)) throw new MigrationConfigLoaderError("The project-local emdash/migrations module returned an invalid migration identity");
+	return identity;
+}
+const defaultDependencies$1 = {
+	findConfigFile: findAstroConfigFile,
+	loadConfig: loadProjectConfig,
+	loadIdentity: loadProjectIdentity
+};
+function asAstroConfig(value) {
+	if (typeof value !== "object" || value === null) throw new MigrationConfigLoaderError("Astro config must export an object");
+	return value;
+}
+async function buildMigrationManifestFromConfig(options, dependencies = defaultDependencies$1) {
+	const projectRoot = resolve(options.projectRoot);
+	const configFile = await dependencies.findConfigFile(projectRoot, options.configFile);
+	const config = asAstroConfig(await dependencies.loadConfig(projectRoot, configFile));
+	const matchingIntegrations = (Array.isArray(config.integrations) ? config.integrations : []).filter((integration) => getMigrationIntegrationMetadata(integration) !== void 0);
+	if (matchingIntegrations.length !== 1) throw new MigrationConfigLoaderError(`Expected exactly one EmDash integration with migration metadata (${String(MIGRATION_CONFIG_SYMBOL)}), found ${matchingIntegrations.length}`);
+	const metadata = getMigrationIntegrationMetadata(matchingIntegrations[0]);
+	if (!metadata?.database) throw new MigrationConfigLoaderError("The EmDash integration does not provide database migration metadata");
+	return buildMigrationManifest({
+		identity: await dependencies.loadIdentity(projectRoot),
+		i18n: normalizeAstroI18n(config.i18n),
+		database: metadata.database
+	});
+}
+
+//#endregion
+//#region src/cli/commands/migrate.ts
+const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
+const SAFE_TARGET_KIND_PATTERN = /^[a-z][a-z0-9_-]*$/;
+const SAFE_MIGRATION_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
+const CREDENTIAL_URL_PATTERN = /:\/\/[^/\s]+@/;
+const CREDENTIAL_QUERY_PATTERN = /[?&](?:auth|credential|key|password|secret|signature|token)=/i;
+const MIGRATE_EXIT_CODES = Object.freeze({
+	success: 0,
+	error: 1,
+	pending: 2,
+	unknownApplied: 3,
+	confirmation: 4,
+	interrupted: 130
+});
+var MigrateCommandError = class extends Error {
+	constructor(message) {
+		super(message);
+		this.name = "MigrateCommandError";
+	}
+};
+function isRecord(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function moduleExport(module, name) {
+	if (!isRecord(module)) return void 0;
+	const direct = Reflect.get(module, name);
+	if (direct !== void 0) return direct;
+	const defaultExport = Reflect.get(module, "default");
+	return isRecord(defaultExport) ? Reflect.get(defaultExport, name) : void 0;
+}
+async function importProjectModule(projectRoot, specifier) {
+	let resolvedEntrypoint;
+	try {
+		resolvedEntrypoint = createRequire(resolve(projectRoot, "package.json")).resolve(specifier);
+	} catch {
+		throw new MigrateCommandError(`Could not resolve ${specifier} from the project.`);
+	}
+	return import(pathToFileURL(resolvedEntrypoint).href);
+}
+function validateIdentity(value) {
+	if (!isRecord(value) || typeof value.emdashVersion !== "string" || !Array.isArray(value.names) || !value.names.every((name) => typeof name === "string") || typeof value.fingerprint !== "string" || !FINGERPRINT_PATTERN.test(value.fingerprint)) throw new MigrateCommandError("The project-local emdash/migrations module returned an invalid migration identity.");
+	return {
+		emdashVersion: value.emdashVersion,
+		names: [...value.names],
+		fingerprint: value.fingerprint
+	};
+}
+async function loadProjectMigrationIdentity(projectRoot) {
+	const getIdentity = moduleExport(await importProjectModule(projectRoot, "emdash/migrations"), "getCoreMigrationIdentity");
+	if (typeof getIdentity !== "function") throw new MigrateCommandError("The project-local emdash/migrations module does not export getCoreMigrationIdentity.");
+	return validateIdentity(await Reflect.apply(getIdentity, void 0, []));
+}
+async function loadProjectMigrationExecutor(projectRoot, entrypoint) {
+	const factory = moduleExport(await importProjectModule(projectRoot, entrypoint), "createMigrationExecutor");
+	if (typeof factory !== "function") throw new MigrateCommandError(`The project-local ${entrypoint} module does not export createMigrationExecutor.`);
+	return (manifestConfig, context) => Reflect.apply(factory, void 0, [manifestConfig, context]);
+}
+async function findProjectRoot(start) {
+	let current = resolve(start);
+	const filesystemRoot = parse(current).root;
+	for (;;) {
+		try {
+			await readFile(resolve(current, "package.json"), "utf8");
+			return current;
+		} catch (error) {
+			if (isRecord(error) && error.code !== "ENOENT" && error.code !== "ENOTDIR") throw new MigrateCommandError("Could not read the project package.json.");
+		}
+		if (current === filesystemRoot) break;
+		current = dirname(current);
+	}
+	throw new MigrateCommandError("Could not find a project root containing package.json.");
+}
+async function readMigrationManifestFile(path, isDefault) {
+	let source;
+	try {
+		source = await readFile(path, "utf8");
+	} catch (error) {
+		if (isDefault && isRecord(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) throw new MigrateCommandError(`No migration manifest found at ${path}. Build the project or use --from-config.`);
+		throw new MigrateCommandError(`Could not read migration manifest: ${path}`);
+	}
+	try {
+		return JSON.parse(source);
+	} catch {
+		throw new MigrateCommandError(`Migration manifest is not valid JSON: ${path}`);
+	}
+}
+async function confirmWithReadline(message) {
+	const prompt = createInterface({
+		input: process.stdin,
+		output: process.stderr
+	});
+	try {
+		const answer = await prompt.question(`${message} [y/N] `);
+		return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
+	} finally {
+		prompt.close();
+	}
+}
+function onProcessSignal(signal, handler) {
+	const listener = () => {
+		handler().finally(() => process.exit(MIGRATE_EXIT_CODES.interrupted));
+	};
+	process.once(signal, listener);
+	return () => process.removeListener(signal, listener);
+}
+const defaultDependencies = {
+	cwd: process.cwd(),
+	env: process.env,
+	interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+	findProjectRoot,
+	readManifest: readMigrationManifestFile,
+	buildManifestFromConfig: (projectRoot, configFile) => buildMigrationManifestFromConfig({
+		projectRoot,
+		configFile
+	}),
+	loadProjectIdentity: loadProjectMigrationIdentity,
+	loadProjectExecutor: loadProjectMigrationExecutor,
+	confirm: confirmWithReadline,
+	writeStdout: (value) => process.stdout.write(`${value}\n`),
+	writeStderr: (value) => process.stderr.write(`${value}\n`),
+	onSignal: onProcessSignal,
+	cleanupTimeoutMs: 2e3
+};
+function validateOptions(options) {
+	if (options.manifest && options.fromConfig) throw new MigrateCommandError("--manifest and --from-config cannot be used together.");
+	if (options.config && !options.fromConfig) throw new MigrateCommandError("--config requires --from-config.");
+	if (options.check && options.status) throw new MigrateCommandError("--check and --status cannot be used together.");
+	if (options.expectedTargetFingerprint && !FINGERPRINT_PATTERN.test(options.expectedTargetFingerprint)) throw new MigrateCommandError("--expected-target-fingerprint must be a SHA-256 fingerprint.");
+}
+function hasControlCharacter(value) {
+	for (let index = 0; index < value.length; index++) {
+		const code = value.charCodeAt(index);
+		if (code <= 31 || code === 127) return true;
+	}
+	return false;
+}
+function targetField(value, name) {
+	if (value === void 0) return void 0;
+	if (typeof value !== "string" || value.length === 0 || hasControlCharacter(value) || CREDENTIAL_URL_PATTERN.test(value) || CREDENTIAL_QUERY_PATTERN.test(value)) throw new MigrateCommandError(`The executor returned an unsafe migration target ${name}.`);
+	return value;
+}
+function immutableTarget(value) {
+	if (!isRecord(value)) throw new MigrateCommandError("The executor returned an invalid migration target.");
+	const kind = targetField(value.kind, "kind");
+	const label = targetField(value.label, "label");
+	const fingerprint = targetField(value.fingerprint, "fingerprint");
+	if (!kind || !SAFE_TARGET_KIND_PATTERN.test(kind) || !label || !fingerprint || !FINGERPRINT_PATTERN.test(fingerprint)) throw new MigrateCommandError("The executor returned an invalid migration target.");
+	const target = {
+		kind,
+		label,
+		fingerprint
+	};
+	const accountId = targetField(value.accountId, "accountId");
+	const environment = targetField(value.environment, "environment");
+	const resourceId = targetField(value.resourceId, "resourceId");
+	if (accountId) target.accountId = accountId;
+	if (environment) target.environment = environment;
+	if (resourceId) target.resourceId = resourceId;
+	return Object.freeze(target);
+}
+function safeMigrationNames(value, field) {
+	if (!Array.isArray(value) || !value.every((name) => typeof name === "string" && SAFE_MIGRATION_NAME_PATTERN.test(name))) throw new MigrateCommandError(`The migration executor returned an invalid ${field} report.`);
+	return [...value];
+}
+function safeReport(value, target) {
+	if (!isRecord(value)) throw new MigrateCommandError("The migration executor returned an invalid report.");
+	const reportTarget = immutableTarget(value.target);
+	if (reportTarget.kind !== target.kind || reportTarget.label !== target.label || reportTarget.fingerprint !== target.fingerprint || reportTarget.accountId !== target.accountId || reportTarget.environment !== target.environment || reportTarget.resourceId !== target.resourceId) throw new MigrateCommandError("The migration executor report target does not match the confirmed target.");
+	return {
+		target: { ...reportTarget },
+		knownApplied: safeMigrationNames(value.knownApplied, "knownApplied"),
+		pending: safeMigrationNames(value.pending, "pending"),
+		unknownApplied: safeMigrationNames(value.unknownApplied, "unknownApplied"),
+		executed: safeMigrationNames(value.executed, "executed")
+	};
+}
+function printTarget(target, write) {
+	write(`Migration target: ${target.kind} ${target.label}`);
+	if (target.accountId) write(`Account: ${target.accountId}`);
+	if (target.environment) write(`Environment: ${target.environment}`);
+	if (target.resourceId) write(`Resource: ${target.resourceId}`);
+	write(`Target fingerprint: ${target.fingerprint}`);
+}
+function printNameSet(label, names, write) {
+	write(`${label}: ${names.length === 0 ? "none" : names.join(", ")}`);
+}
+function printHumanReport(report, write) {
+	printNameSet("Known applied", report.knownApplied, write);
+	printNameSet("Pending", report.pending, write);
+	printNameSet("Unknown applied", report.unknownApplied, write);
+	printNameSet("Executed", report.executed, write);
+}
+function reportExitCode(options, report) {
+	if (!options.check) return MIGRATE_EXIT_CODES.success;
+	if (report.unknownApplied.length > 0) return MIGRATE_EXIT_CODES.unknownApplied;
+	if (report.pending.length > 0) return MIGRATE_EXIT_CODES.pending;
+	return MIGRATE_EXIT_CODES.success;
+}
+function createOverrides(options) {
+	return {
+		database: options.database,
+		databaseUrlEnv: options.databaseUrlEnv,
+		d1: options.d1,
+		accountId: options.accountId,
+		wranglerConfig: options.wranglerConfig,
+		wranglerEnv: options.wranglerEnv
+	};
+}
+function bounded(operation, timeoutMs) {
+	let timer;
+	const timeout = new Promise((resolveTimeout) => {
+		timer = setTimeout(resolveTimeout, timeoutMs, "timeout");
+	});
+	const completion = operation.then(() => "complete", () => "failed");
+	return Promise.race([completion, timeout]).finally(() => clearTimeout(timer));
+}
+async function loadManifest(options, projectRoot, dependencies) {
+	if (options.fromConfig) {
+		dependencies.writeStderr(`Using trusted evaluated Astro configuration${options.config ? `: ${options.config}` : "."}`);
+		return dependencies.buildManifestFromConfig(projectRoot, options.config);
+	}
+	const isDefault = !options.manifest;
+	const path = options.manifest ? isAbsolute(options.manifest) ? options.manifest : resolve(projectRoot, options.manifest) : resolve(projectRoot, ".emdash/migrations.json");
+	return dependencies.readManifest(path, isDefault);
+}
+function redactExecutorMessage(message, env) {
+	let redacted = message.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/\S+/g, "[REDACTED_URL]").replace(/\b(auth|credential|key|password|secret|signature|token)\s*[=:]\s*\S+/gi, "$1=[REDACTED]");
+	for (const value of Object.values(env)) if (value && value.length >= 4) redacted = redacted.replaceAll(value, "[REDACTED]");
+	return redacted.replaceAll(/[\r\n\t]/g, " ").slice(0, 1e3);
+}
+function safeCommandMessage(error, env) {
+	if (error instanceof MigrateCommandError || error instanceof MigrationManifestValidationError) return error.message;
+	if (error instanceof Error && error.message) return redactExecutorMessage(error.message, env);
+	return "Migration command failed. Check the project configuration, target, and credentials.";
+}
+async function runMigrateCommand(options, dependencies = defaultDependencies) {
+	let executor;
+	let disposePromise;
+	let interrupted = false;
+	let primaryFailure = false;
+	let exitCode = MIGRATE_EXIT_CODES.error;
+	const interruptedResult = Symbol("interrupted");
+	let resolveInterruption;
+	const interruption = new Promise((resolveInterrupted) => {
+		resolveInterruption = () => resolveInterrupted(interruptedResult);
+	});
+	const dispose = () => {
+		disposePromise ??= executor?.dispose?.() ?? Promise.resolve();
+		return disposePromise;
+	};
+	const removeSignalHandlers = [];
+	const execute = async () => {
+		try {
+			validateOptions(options);
+			const projectRoot = await dependencies.findProjectRoot(dependencies.cwd);
+			const manifest = await validateMigrationManifest(await loadManifest(options, projectRoot, dependencies), await dependencies.loadProjectIdentity(projectRoot));
+			executor = await (await dependencies.loadProjectExecutor(projectRoot, manifest.database.executorEntrypoint))(manifest.database.executorConfig, {
+				projectRoot,
+				env: dependencies.env,
+				overrides: createOverrides(options)
+			});
+			const target = immutableTarget(executor.target);
+			printTarget(target, dependencies.writeStderr);
+			const onSignal = async () => {
+				interrupted = true;
+				await bounded(dispose(), dependencies.cleanupTimeoutMs);
+				resolveInterruption?.();
+			};
+			removeSignalHandlers.push(dependencies.onSignal("SIGINT", onSignal), dependencies.onSignal("SIGTERM", onSignal));
+			const applying = !options.check && !options.status;
+			if (applying && target.kind === "d1") dependencies.writeStderr("Warning: D1 migration jobs must be serialized externally by Cloudflare account and database UUID; this command does not coordinate concurrent applies.");
+			if (applying) {
+				if (options.expectedTargetFingerprint) {
+					if (options.expectedTargetFingerprint !== target.fingerprint) {
+						dependencies.writeStderr("Expected target fingerprint does not match the target.");
+						exitCode = MIGRATE_EXIT_CODES.confirmation;
+						return exitCode;
+					}
+				} else if (!dependencies.interactive || options.json) {
+					dependencies.writeStderr("Noninteractive apply requires --expected-target-fingerprint with the displayed fingerprint.");
+					exitCode = MIGRATE_EXIT_CODES.confirmation;
+					return exitCode;
+				} else if (!await dependencies.confirm(`Apply EmDash migrations to ${target.label}?`)) {
+					dependencies.writeStderr("Migration cancelled.");
+					exitCode = MIGRATE_EXIT_CODES.confirmation;
+					return exitCode;
+				}
+			}
+			const rawReport = await Promise.race([executor.execute({
+				action: applying ? "apply" : "check",
+				i18n: manifest.i18n,
+				artifact: {
+					emdashVersion: manifest.emdashVersion,
+					migrationSetFingerprint: manifest.migrationSet.fingerprint
+				}
+			}), interruption]);
+			if (rawReport === interruptedResult || interrupted) {
+				exitCode = MIGRATE_EXIT_CODES.interrupted;
+				return exitCode;
+			}
+			const report = safeReport(rawReport, target);
+			if (options.json) dependencies.writeStdout(JSON.stringify(report));
+			else printHumanReport(report, dependencies.writeStdout);
+			exitCode = reportExitCode(options, report);
+			return exitCode;
+		} catch (error) {
+			primaryFailure = true;
+			dependencies.writeStderr(safeCommandMessage(error, dependencies.env));
+			exitCode = interrupted ? MIGRATE_EXIT_CODES.interrupted : MIGRATE_EXIT_CODES.error;
+			return exitCode;
+		}
+	};
+	try {
+		exitCode = await execute();
+	} finally {
+		for (const remove of removeSignalHandlers) remove();
+		if (executor) {
+			if (await bounded(dispose(), dependencies.cleanupTimeoutMs) !== "complete" && !primaryFailure && !interrupted) {
+				dependencies.writeStderr("Migration executor cleanup failed.");
+				exitCode = MIGRATE_EXIT_CODES.error;
+			}
+		}
+	}
+	return exitCode;
+}
+const migrateCommand = defineCommand({
+	meta: {
+		name: "migrate",
+		description: "Check or apply deployment-managed EmDash migrations"
+	},
+	args: {
+		manifest: {
+			type: "string",
+			description: "Migration manifest path"
+		},
+		"from-config": {
+			type: "boolean",
+			description: "Build the manifest from Astro config"
+		},
+		config: {
+			type: "string",
+			description: "Astro config path (requires --from-config)"
+		},
+		check: {
+			type: "boolean",
+			description: "Check for pending or unknown migrations"
+		},
+		status: {
+			type: "boolean",
+			description: "Report all migration status sets"
+		},
+		json: {
+			type: "boolean",
+			description: "Print the stable JSON report"
+		},
+		"expected-target-fingerprint": {
+			type: "string",
+			description: "Required target fingerprint for noninteractive apply"
+		},
+		database: {
+			type: "string",
+			description: "Override the SQLite database path"
+		},
+		"database-url-env": {
+			type: "string",
+			description: "Override the database URL environment-variable name"
+		},
+		d1: {
+			type: "string",
+			description: "Override the D1 database UUID or name"
+		},
+		"account-id": {
+			type: "string",
+			description: "Override the Cloudflare account ID"
+		},
+		"wrangler-config": {
+			type: "string",
+			description: "Override the Wrangler config path"
+		},
+		"wrangler-env": {
+			type: "string",
+			description: "Override the Wrangler environment"
+		}
+	},
+	async run({ args }) {
+		process.exitCode = await runMigrateCommand({
+			manifest: args.manifest,
+			fromConfig: args["from-config"],
+			config: args.config,
+			check: args.check,
+			status: args.status,
+			json: args.json,
+			expectedTargetFingerprint: args["expected-target-fingerprint"],
+			database: args.database,
+			databaseUrlEnv: args["database-url-env"],
+			d1: args.d1,
+			accountId: args["account-id"],
+			wranglerConfig: args["wrangler-config"],
+			wranglerEnv: args["wrangler-env"]
+		});
+	}
+});
+
+//#endregion
+//#region src/cli/commands/plugin-init.ts
+/**
+* emdash plugin init
+*
+* Scaffold a new EmDash plugin. Generates the sandboxed-format boilerplate:
+*   src/index.ts         -- descriptor factory
+*   src/sandbox-entry.ts -- definePlugin({ hooks, routes })
+*   package.json
+*   tsconfig.json
+*
+* Use --format=native (or --native) to generate native-format boilerplate
+* instead (createPlugin + React admin). When neither is passed and stdout
+* is a TTY, the user is prompted to choose.
+*
+*/
+const SLUG_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const SCOPE_RE = /^@[^/]+\//;
+const pluginInitCommand = defineCommand({
+	meta: {
+		name: "init",
+		description: "Scaffold a new plugin"
+	},
+	args: {
+		dir: {
+			type: "string",
+			description: "Directory to create the plugin in (default: current directory)",
+			default: "."
+		},
+		name: {
+			type: "string",
+			description: "Plugin name/id (e.g. my-plugin or @org/my-plugin)"
+		},
+		format: {
+			type: "string",
+			description: "Plugin format: sandboxed or native. Prompts when running interactively if not set.",
+			valueHint: "sandboxed|native"
+		},
+		native: {
+			type: "boolean",
+			description: "Shortcut for --format=native",
+			default: false
+		}
+	},
+	async run({ args }) {
+		const targetDir = resolve(args.dir);
+		const format = await resolveFormat(args.format, args.native);
+		if (!format) {
+			consola.info("Cancelled");
+			return;
+		}
+		const isNative = format === "native";
+		let pluginName = args.name || basename(targetDir);
+		if (!pluginName || pluginName === ".") pluginName = basename(resolve("."));
+		const slug = pluginName.replace(SCOPE_RE, "");
+		if (!SLUG_RE.test(slug)) {
+			consola.error(`Invalid plugin name "${pluginName}". Use lowercase letters, numbers, and hyphens (e.g. my-plugin).`);
+			process.exit(1);
+		}
+		const srcDir = join(targetDir, "src");
+		if (await fileExists$4(join(targetDir, "package.json"))) {
+			consola.error(`package.json already exists in ${targetDir}`);
+			process.exit(1);
+		}
+		consola.start(`Scaffolding ${isNative ? "native" : "sandboxed"} plugin: ${pluginName}`);
+		await mkdir(srcDir, { recursive: true });
+		if (isNative) await scaffoldNative(targetDir, srcDir, pluginName, slug);
+		else await scaffoldStandard(targetDir, srcDir, pluginName, slug);
+		consola.success(`Plugin scaffolded in ${targetDir}`);
+		consola.info("Next steps:");
+		const steps = [];
+		if (args.dir !== ".") steps.push(`cd ${args.dir}`);
+		steps.push("pnpm install");
+		steps.push(isNative ? "Edit src/index.ts to add hooks and routes" : "Edit src/sandbox-entry.ts to add hooks and routes");
+		steps.push("pnpm build");
+		if (!isNative) steps.push("emdash plugin validate --dir .");
+		steps.forEach((step, i) => consola.info(`  ${i + 1}. ${step}`));
+	}
+});
+async function resolveFormat(formatArg, nativeFlag) {
+	if (formatArg) {
+		const normalized = formatArg.toLowerCase();
+		let parsed;
+		if (normalized === "native") parsed = "native";
+		else if (normalized === "sandboxed" || normalized === "standard") parsed = "standard";
+		else {
+			consola.error(`Invalid --format "${formatArg}". Use "sandboxed" or "native".`);
+			process.exit(1);
+		}
+		if (nativeFlag && parsed !== "native") {
+			consola.error(`Conflicting flags: --native and --format=${formatArg}. Pass only one.`);
+			process.exit(1);
+		}
+		return parsed;
+	}
+	if (nativeFlag) return "native";
+	if (!process.stdout.isTTY) return "standard";
+	const choice = await consola.prompt("Which plugin format?", {
+		type: "select",
+		initial: "standard",
+		options: [{
+			label: "Sandboxed",
+			value: "standard",
+			hint: "runs in an isolated sandbox; safe to install from the marketplace"
+		}, {
+			label: "Native",
+			value: "native",
+			hint: "full runtime access; install from npm"
+		}],
+		cancel: "null"
+	});
+	if (choice === null) return null;
+	return choice;
+}
+function camelCase(slug) {
+	return slug.split("-").map((s, i) => i === 0 ? s : s[0].toUpperCase() + s.slice(1)).join("");
+}
+function pascalCase(slug) {
+	return slug.split("-").map((s) => s[0].toUpperCase() + s.slice(1)).join("");
+}
+const TSCONFIG = {
+	compilerOptions: {
+		target: "ES2022",
+		module: "preserve",
+		moduleResolution: "bundler",
+		strict: true,
+		esModuleInterop: true,
+		declaration: true,
+		outDir: "./dist",
+		rootDir: "./src"
+	},
+	include: ["src/**/*"],
+	exclude: ["node_modules", "dist"]
+};
+const TSDOWN_VERSION = "^0.20.0";
+const TYPESCRIPT_VERSION = "^5.9.0";
+async function scaffoldStandard(targetDir, srcDir, pluginName, slug) {
+	const fnName = camelCase(slug);
+	await writeFile(join(targetDir, "package.json"), JSON.stringify({
+		name: pluginName,
+		version: "0.1.0",
+		type: "module",
+		main: "./dist/index.mjs",
+		exports: {
+			".": {
+				types: "./dist/index.d.mts",
+				import: "./dist/index.mjs"
+			},
+			"./sandbox": {
+				types: "./dist/sandbox-entry.d.mts",
+				import: "./dist/sandbox-entry.mjs"
+			}
+		},
+		files: ["dist"],
+		scripts: {
+			build: "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --clean",
+			dev: "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --watch",
+			typecheck: "tsc --noEmit"
+		},
+		keywords: ["emdash", "emdash-plugin"],
+		license: "MIT",
+		peerDependencies: { emdash: "*" },
+		devDependencies: {
+			emdash: "*",
+			tsdown: TSDOWN_VERSION,
+			typescript: TYPESCRIPT_VERSION
+		}
+	}, null, "	") + "\n");
+	await writeFile(join(targetDir, "tsconfig.json"), JSON.stringify(TSCONFIG, null, "	") + "\n");
+	await writeFile(join(srcDir, "index.ts"), `import type { PluginDescriptor } from "emdash";
+
+export function ${fnName}Plugin(): PluginDescriptor {
+\treturn {
+\t\tid: "${slug}",
+\t\tversion: "0.1.0",
+\t\tformat: "standard",
+\t\tentrypoint: "${pluginName}/sandbox",
+
+\t\tcapabilities: ["content:read"],
+\t\tstorage: {
+\t\t\tevents: { indexes: ["timestamp"] },
+\t\t},
+\t};
+}
+`);
+	await writeFile(join(srcDir, "sandbox-entry.ts"), `import { definePlugin } from "emdash";
+import type { PluginContext } from "emdash";
+
+interface ContentSaveEvent {
+\tcollection: string;
+\tcontent: { id: string };
+\tisNew: boolean;
+}
+
+export default definePlugin({
+\thooks: {
+\t\t"content:afterSave": {
+\t\t\thandler: async (event: ContentSaveEvent, ctx: PluginContext) => {
+\t\t\t\tctx.log.info("Content saved", {
+\t\t\t\t\tcollection: event.collection,
+\t\t\t\t\tid: event.content.id,
+\t\t\t\t});
+
+\t\t\t\tawait ctx.storage.events.put(\`save-\${Date.now()}\`, {
+\t\t\t\t\ttimestamp: new Date().toISOString(),
+\t\t\t\t\tcollection: event.collection,
+\t\t\t\t\tcontentId: event.content.id,
+\t\t\t\t});
+\t\t\t},
+\t\t},
+\t},
+
+\troutes: {
+\t\trecent: {
+\t\t\thandler: async (_routeCtx, ctx: PluginContext) => {
+\t\t\t\tconst result = await ctx.storage.events.query({
+\t\t\t\t\torderBy: { timestamp: "desc" },
+\t\t\t\t\tlimit: 10,
+\t\t\t\t});
+\t\t\t\treturn { events: result.items };
+\t\t\t},
+\t\t},
+\t},
+});
+`);
+}
+async function scaffoldNative(targetDir, srcDir, pluginName, slug) {
+	const fnName = camelCase(slug);
+	const typeName = pascalCase(slug);
+	await writeFile(join(targetDir, "package.json"), JSON.stringify({
+		name: pluginName,
+		version: "0.1.0",
+		type: "module",
+		main: "./dist/index.mjs",
+		exports: { ".": {
+			types: "./dist/index.d.mts",
+			import: "./dist/index.mjs"
+		} },
+		files: ["dist"],
+		scripts: {
+			build: "tsdown src/index.ts --format esm --dts --clean",
+			dev: "tsdown src/index.ts --format esm --dts --watch",
+			typecheck: "tsc --noEmit"
+		},
+		keywords: ["emdash", "emdash-plugin"],
+		license: "MIT",
+		peerDependencies: { emdash: "*" },
+		devDependencies: {
+			emdash: "*",
+			tsdown: TSDOWN_VERSION,
+			typescript: TYPESCRIPT_VERSION
+		}
+	}, null, "	") + "\n");
+	await writeFile(join(targetDir, "tsconfig.json"), JSON.stringify(TSCONFIG, null, "	") + "\n");
+	await writeFile(join(srcDir, "index.ts"), `import { definePlugin } from "emdash";
+import type { PluginDescriptor } from "emdash";
+
+export interface ${typeName}Options {
+\tenabled?: boolean;
+}
+
+export function ${fnName}Plugin(options: ${typeName}Options = {}): PluginDescriptor<${typeName}Options> {
+\treturn {
+\t\tid: "${slug}",
+\t\tversion: "0.1.0",
+\t\tformat: "native",
+\t\tentrypoint: "${pluginName}",
+\t\toptions,
+\t};
+}
+
+export function createPlugin(options: ${typeName}Options = {}) {
+\treturn definePlugin({
+\t\tid: "${slug}",
+\t\tversion: "0.1.0",
+
+\t\tcapabilities: ["content:read"],
+\t\tstorage: {
+\t\t\tevents: { indexes: ["createdAt"] },
+\t\t},
+
+\t\thooks: {
+\t\t\t"content:afterSave": async (event, ctx) => {
+\t\t\t\tif (options.enabled === false) return;
+\t\t\t\tawait ctx.storage.events.put(\`evt_\${Date.now()}\`, {
+\t\t\t\t\tcollection: event.collection,
+\t\t\t\t\tcontentId: event.content.id,
+\t\t\t\t\tcreatedAt: new Date().toISOString(),
+\t\t\t\t});
+\t\t\t},
+\t\t},
+
+\t\troutes: {
+\t\t\trecent: {
+\t\t\t\thandler: async (ctx) => {
+\t\t\t\t\tconst result = await ctx.storage.events.query({
+\t\t\t\t\t\torderBy: { createdAt: "desc" },
+\t\t\t\t\t\tlimit: 10,
+\t\t\t\t\t});
+\t\t\t\t\treturn { events: result.items };
+\t\t\t\t},
+\t\t\t},
+\t\t},
+\t});
+}
+
+export default createPlugin;
+`);
+}
+
+//#endregion
+//#region src/cli/commands/plugin-validate.ts
+/**
+* emdash plugin validate
+*
+* Runs bundle validation without producing a tarball.
+* Thin wrapper around `emdash plugin bundle --validate-only`.
+*
+*/
+const pluginValidateCommand = defineCommand({
+	meta: {
+		name: "validate",
+		description: "Validate a plugin without producing a tarball (same checks as bundle)"
+	},
+	args: { dir: {
+		type: "string",
+		description: "Plugin directory (default: current directory)",
+		default: "."
+	} },
+	async run({ args }) {
+		await runCommand(bundleCommand, { rawArgs: [
+			"--dir",
+			args.dir,
+			"--validateOnly"
+		] });
+	}
+});
+
+//#endregion
+//#region src/cli/commands/publish.ts
+/**
+* emdash plugin publish
+*
+* Publishes a plugin tarball to the EmDash Marketplace.
+*
+* Flow:
+* 1. Resolve tarball (from --tarball path, or build via `emdash plugin bundle`)
+* 2. Read manifest.json from tarball to show summary
+* 3. Authenticate (stored credential or GitHub device flow)
+* 4. Pre-publish validation (check plugin exists, version not published)
+* 5. Upload via multipart POST
+* 6. Display audit results
+*/
+const DEFAULT_REGISTRY = "https://marketplace.emdashcms.com";
+/**
+* Authenticate with the marketplace via GitHub Device Flow.
+* Returns the marketplace JWT and author info.
+*/
+async function authenticateViaDeviceFlow(registryUrl) {
+	consola.start("Fetching auth configuration...");
+	const discoveryRes = await fetch(new URL("/api/v1/auth/discovery", registryUrl));
+	if (!discoveryRes.ok) throw new Error(`Marketplace unreachable: ${discoveryRes.status} ${discoveryRes.statusText}`);
+	const discovery = await discoveryRes.json();
+	const deviceRes = await fetch(discovery.github.deviceAuthorizationEndpoint, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json"
+		},
+		body: JSON.stringify({
+			client_id: discovery.github.clientId,
+			scope: "read:user user:email"
+		})
+	});
+	if (!deviceRes.ok) throw new Error(`GitHub device flow failed: ${deviceRes.status}`);
+	const deviceCode = await deviceRes.json();
+	console.log();
+	consola.info("Open your browser to:");
+	console.log(`  ${pc.cyan(pc.bold(deviceCode.verification_uri))}`);
+	console.log();
+	consola.info(`Enter code: ${pc.yellow(pc.bold(deviceCode.user_code))}`);
+	console.log();
+	try {
+		const { execFile } = await import("node:child_process");
+		if (process.platform === "darwin") execFile("open", [deviceCode.verification_uri]);
+		else if (process.platform === "win32") execFile("cmd", [
+			"/c",
+			"start",
+			"",
+			deviceCode.verification_uri
+		]);
+		else execFile("xdg-open", [deviceCode.verification_uri]);
+	} catch {}
+	consola.start("Waiting for authorization...");
+	const githubToken = await pollGitHubDeviceFlow(discovery.github.tokenEndpoint, discovery.github.clientId, deviceCode.device_code, deviceCode.interval, deviceCode.expires_in);
+	consola.start("Authenticating with marketplace...");
+	const deviceTokenUrl = new URL(discovery.marketplace.deviceTokenEndpoint, registryUrl);
+	const authRes = await fetch(deviceTokenUrl, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ access_token: githubToken })
+	});
+	if (!authRes.ok) {
+		const body = await authRes.json().catch(() => ({}));
+		throw new Error(`Marketplace auth failed: ${body.error ?? authRes.statusText}`);
+	}
+	return await authRes.json();
+}
+async function pollGitHubDeviceFlow(tokenEndpoint, clientId, deviceCode, interval, expiresIn) {
+	const deadline = Date.now() + expiresIn * 1e3;
+	let currentInterval = interval;
+	while (Date.now() < deadline) {
+		await new Promise((r) => setTimeout(r, currentInterval * 1e3));
+		const body = await (await fetch(tokenEndpoint, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json"
+			},
+			body: JSON.stringify({
+				client_id: clientId,
+				device_code: deviceCode,
+				grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+			})
+		})).json();
+		if (body.access_token) return body.access_token;
+		if (body.error === "authorization_pending") continue;
+		if (body.error === "slow_down") {
+			currentInterval = body.interval ?? currentInterval + 5;
+			continue;
+		}
+		if (body.error === "expired_token") throw new Error("Device code expired. Please try again.");
+		if (body.error === "access_denied") throw new Error("Authorization was denied.");
+		throw new Error(`GitHub token exchange failed: ${body.error ?? "unknown error"}`);
+	}
+	throw new Error("Device code expired (timeout). Please try again.");
+}
+const manifestSummarySchema = pluginManifestSchema.pick({
+	id: true,
+	version: true,
+	capabilities: true,
+	allowedHosts: true
+});
+/**
+* Read manifest.json from a tarball without fully extracting it.
+*/
+async function readManifestFromTarball(tarballPath) {
+	const data = await readFile(tarballPath);
+	const manifest = (await unpackTar(new ReadableStream({ start(controller) {
+		controller.enqueue(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+		controller.close();
+	} }).pipeThrough(createGzipDecoder()), { filter: (header) => header.name === "manifest.json" })).find((e) => e.header.name === "manifest.json");
+	if (!manifest?.data) throw new Error("Tarball does not contain manifest.json");
+	const content = new TextDecoder().decode(manifest.data);
+	const parsed = JSON.parse(content);
+	const result = manifestSummarySchema.safeParse(parsed);
+	if (!result.success) throw new Error(`Invalid manifest.json: ${result.error.message}`);
+	return result.data;
+}
+const POLL_INTERVAL_MS = 3e3;
+const POLL_TIMEOUT_MS = 12e4;
+/**
+* Poll the version endpoint until status leaves "pending" or timeout.
+* Returns the final version data, or null on timeout.
+*/
+async function pollVersionStatus(versionUrl, token) {
+	const deadline = Date.now() + POLL_TIMEOUT_MS;
+	while (Date.now() < deadline) {
+		await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+		try {
+			const res = await fetch(versionUrl, { headers: { Authorization: `Bearer ${token}` } });
+			if (!res.ok) continue;
+			const data = await res.json();
+			if (data.status !== "pending") return data;
+		} catch {}
+	}
+	return null;
+}
+function displayAuditResults(version) {
+	const statusColor = version.status === "published" ? pc.green : version.status === "flagged" ? pc.yellow : pc.red;
+	consola.info(`  Status: ${statusColor(version.status)}`);
+	if (version.audit_verdict) {
+		const verdictColor = version.audit_verdict === "pass" ? pc.green : version.audit_verdict === "warn" ? pc.yellow : pc.red;
+		consola.info(`  Audit: ${verdictColor(version.audit_verdict)}`);
+	}
+	if (version.image_audit_verdict) {
+		const verdictColor = version.image_audit_verdict === "pass" ? pc.green : version.image_audit_verdict === "warn" ? pc.yellow : pc.red;
+		consola.info(`  Image audit: ${verdictColor(version.image_audit_verdict)}`);
+	}
+}
+function displayInlineAuditResults(audit, imageAudit) {
+	const verdictColor = audit.verdict === "pass" ? pc.green : audit.verdict === "warn" ? pc.yellow : pc.red;
+	consola.info(`  Audit: ${verdictColor(audit.verdict)} (risk: ${audit.riskScore}/100)`);
+	if (audit.findings.length > 0) for (const finding of audit.findings) {
+		const icon = finding.severity === "high" ? pc.red("!") : pc.yellow("~");
+		consola.info(`    ${icon} [${finding.category}] ${finding.description}`);
+	}
+	if (imageAudit) {
+		const imgColor = imageAudit.verdict === "pass" ? pc.green : imageAudit.verdict === "warn" ? pc.yellow : pc.red;
+		consola.info(`  Image audit: ${imgColor(imageAudit.verdict)}`);
+	}
+}
+const publishCommand = defineCommand({
+	meta: {
+		name: "publish",
+		description: "Publish a plugin to the EmDash Marketplace"
+	},
+	args: {
+		tarball: {
+			type: "string",
+			description: "Path to plugin tarball (default: build first via `emdash plugin bundle`)"
+		},
+		dir: {
+			type: "string",
+			description: "Plugin directory (used with --build, default: current directory)",
+			default: process.cwd()
+		},
+		build: {
+			type: "boolean",
+			description: "Build the plugin before publishing",
+			default: false
+		},
+		registry: {
+			type: "string",
+			description: "Marketplace registry URL",
+			default: DEFAULT_REGISTRY
+		},
+		"no-wait": {
+			type: "boolean",
+			description: "Exit immediately after upload without waiting for audit (useful for CI)",
+			default: false
+		}
+	},
+	async run({ args }) {
+		const registryUrl = args.registry;
+		let tarballPath;
+		if (args.tarball) tarballPath = resolve(args.tarball);
+		else if (args.build) {
+			consola.start("Building plugin...");
+			const pluginDir = resolve(args.dir);
+			try {
+				const { runCommand } = await import("citty");
+				const { bundleCommand } = await import("../bundle-CL0JjIPx.mjs").then((n) => n.n);
+				await runCommand(bundleCommand, { rawArgs: ["--dir", pluginDir] });
+			} catch {
+				consola.error("Build failed");
+				process.exit(1);
+			}
+			const { readdir } = await import("node:fs/promises");
+			const distDir = resolve(pluginDir, "dist");
+			const tarball = (await readdir(distDir)).find((f) => f.endsWith(".tar.gz"));
+			if (!tarball) {
+				consola.error("Build succeeded but no .tar.gz found in dist/");
+				process.exit(1);
+			}
+			tarballPath = resolve(distDir, tarball);
+		} else {
+			const pluginDir = resolve(args.dir);
+			const { readdir } = await import("node:fs/promises");
+			try {
+				const distDir = resolve(pluginDir, "dist");
+				const tarball = (await readdir(distDir)).find((f) => f.endsWith(".tar.gz"));
+				if (tarball) tarballPath = resolve(distDir, tarball);
+				else {
+					consola.error("No tarball found. Run `emdash plugin bundle` first or use --build.");
+					process.exit(1);
+				}
+			} catch {
+				consola.error("No dist/ directory found. Run `emdash plugin bundle` first or use --build.");
+				process.exit(1);
+			}
+		}
+		const sizeKB = ((await stat(tarballPath)).size / 1024).toFixed(1);
+		consola.info(`Tarball: ${pc.dim(tarballPath)} (${sizeKB}KB)`);
+		const manifest = await readManifestFromTarball(tarballPath);
+		console.log();
+		consola.info(`Plugin: ${pc.bold(`${manifest.id}@${manifest.version}`)}`);
+		if (manifest.capabilities.length > 0) consola.info(`Capabilities: ${manifest.capabilities.join(", ")}`);
+		if (manifest.allowedHosts?.length) consola.info(`Allowed hosts: ${manifest.allowedHosts.join(", ")}`);
+		console.log();
+		const deprecatedCaps = manifest.capabilities.filter(isDeprecatedCapability);
+		if (deprecatedCaps.length > 0) {
+			consola.error("Plugin declares deprecated capability names. Rename them and re-bundle before publishing:");
+			for (const cap of deprecatedCaps) {
+				const replacement = CAPABILITY_RENAMES[cap];
+				consola.error(`  ${cap} → ${replacement}`);
+			}
+			consola.error("See https://emdashcms.com/docs/plugins/overview#capabilities for the full rename table.");
+			process.exit(1);
+		}
+		let token;
+		const envToken = process.env.EMDASH_MARKETPLACE_TOKEN;
+		const stored = !envToken ? getMarketplaceCredential(registryUrl) : null;
+		if (envToken) {
+			token = envToken;
+			consola.info("Using EMDASH_MARKETPLACE_TOKEN for authentication");
+		} else if (stored) {
+			token = stored.token;
+			consola.info(`Authenticated as ${pc.bold(stored.author?.name ?? "unknown")}`);
+		} else {
+			consola.info("Not logged in to marketplace. Starting GitHub authentication...");
+			const result = await authenticateViaDeviceFlow(registryUrl);
+			token = result.token;
+			saveMarketplaceCredential(registryUrl, {
+				token: result.token,
+				expiresAt: new Date(Date.now() + 30 * 86400 * 1e3).toISOString(),
+				author: {
+					id: result.author.id,
+					name: result.author.name
+				}
+			});
+			consola.success(`Authenticated as ${pc.bold(result.author.name)}`);
+		}
+		consola.start("Checking marketplace...");
+		const pluginRes = await fetch(new URL(`/api/v1/plugins/${manifest.id}`, registryUrl));
+		if (pluginRes.status === 404 && !envToken) {
+			consola.info(`Plugin ${pc.bold(manifest.id)} not found in marketplace. Registering...`);
+			const createRes = await fetch(new URL("/api/v1/plugins", registryUrl), {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`
+				},
+				body: JSON.stringify({
+					id: manifest.id,
+					name: manifest.id,
+					capabilities: manifest.capabilities
+				})
+			});
+			if (!createRes.ok) {
+				const body = await createRes.json().catch(() => ({}));
+				if (createRes.status === 401) {
+					removeMarketplaceCredential(registryUrl);
+					consola.error("Authentication expired. Please run `emdash plugin publish` again to re-authenticate.");
+					process.exit(1);
+				}
+				consola.error(`Failed to register plugin: ${body.error ?? createRes.statusText}`);
+				process.exit(1);
+			}
+			consola.success(`Registered ${pc.bold(manifest.id)}`);
+		} else if (pluginRes.status === 404 && envToken) consola.info(`Plugin ${pc.bold(manifest.id)} will be auto-registered on publish`);
+		else if (!pluginRes.ok) {
+			consola.error(`Marketplace error: ${pluginRes.status}`);
+			process.exit(1);
+		}
+		consola.start(`Publishing ${manifest.id}@${manifest.version}...`);
+		const tarballData = await readFile(tarballPath);
+		const formData = new FormData();
+		formData.append("bundle", new Blob([tarballData], { type: "application/gzip" }), basename(tarballPath));
+		const uploadUrl = new URL(`/api/v1/plugins/${manifest.id}/versions`, registryUrl);
+		const uploadRes = await fetch(uploadUrl, {
+			method: "POST",
+			headers: { Authorization: `Bearer ${token}` },
+			body: formData
+		});
+		if (!uploadRes.ok && uploadRes.status !== 202) {
+			const body = await uploadRes.json().catch(() => ({}));
+			if (uploadRes.status === 401) {
+				if (envToken) consola.error("EMDASH_MARKETPLACE_TOKEN was rejected by the marketplace.");
+				else {
+					removeMarketplaceCredential(registryUrl);
+					consola.error("Authentication expired. Please run `emdash plugin publish` again.");
+				}
+				process.exit(1);
+			}
+			if (uploadRes.status === 409) {
+				if (body.latestVersion) consola.error(`Version ${manifest.version} must be greater than ${body.latestVersion}`);
+				else consola.error(body.error ?? "Version conflict");
+				process.exit(1);
+			}
+			if (uploadRes.status === 422 && body.audit) {
+				consola.error("Plugin failed security audit:");
+				consola.error(`  Verdict: ${pc.red(body.audit.verdict)}`);
+				consola.error(`  Summary: ${body.audit.summary}`);
+				process.exit(1);
+			}
+			consola.error(`Publish failed: ${body.error ?? uploadRes.statusText}`);
+			process.exit(1);
+		}
+		const result = await uploadRes.json();
+		console.log();
+		consola.success(`Uploaded ${pc.bold(`${manifest.id}@${result.version}`)}`);
+		consola.info(`  Checksum: ${pc.dim(result.checksum)}`);
+		consola.info(`  Size: ${(result.bundleSize / 1024).toFixed(1)}KB`);
+		if (uploadRes.status === 202) {
+			consola.info(`  Status: ${pc.yellow("pending")} (audit running in background)`);
+			if (args["no-wait"]) {
+				consola.info("Skipping audit wait (--no-wait). Check status later.");
+				console.log();
+				return;
+			}
+			consola.start("Waiting for security audit to complete...");
+			const versionUrl = new URL(`/api/v1/plugins/${manifest.id}/versions/${manifest.version}`, registryUrl);
+			const finalStatus = await pollVersionStatus(versionUrl.toString(), token);
+			if (finalStatus) displayAuditResults(finalStatus);
+			else {
+				consola.warn("Audit did not complete within timeout. Check status later with:");
+				consola.info(`  ${pc.dim(`curl ${versionUrl.toString()}`)}`);
+			}
+		} else {
+			if (result.audit) displayInlineAuditResults(result.audit, result.imageAudit ?? null);
+			consola.info(`  Status: ${pc.green(result.status ?? "published")}`);
+		}
+		console.log();
+	}
+});
+const marketplaceLoginCommand = defineCommand({
+	meta: {
+		name: "login",
+		description: "Log in to the EmDash Marketplace via GitHub"
+	},
+	args: { registry: {
+		type: "string",
+		description: "Marketplace registry URL",
+		default: DEFAULT_REGISTRY
+	} },
+	async run({ args }) {
+		const registryUrl = args.registry;
+		const existing = getMarketplaceCredential(registryUrl);
+		if (existing) {
+			consola.info(`Already logged in as ${pc.bold(existing.author?.name ?? "unknown")}`);
+			consola.info("Use `emdash plugin logout` to log out first.");
+			return;
+		}
+		const result = await authenticateViaDeviceFlow(registryUrl);
+		saveMarketplaceCredential(registryUrl, {
+			token: result.token,
+			expiresAt: new Date(Date.now() + 30 * 86400 * 1e3).toISOString(),
+			author: {
+				id: result.author.id,
+				name: result.author.name
+			}
+		});
+		consola.success(`Logged in as ${pc.bold(result.author.name)}`);
+	}
+});
+const marketplaceLogoutCommand = defineCommand({
+	meta: {
+		name: "logout",
+		description: "Log out of the EmDash Marketplace"
+	},
+	args: { registry: {
+		type: "string",
+		description: "Marketplace registry URL",
+		default: DEFAULT_REGISTRY
+	} },
+	async run({ args }) {
+		if (removeMarketplaceCredential(args.registry)) consola.success("Logged out of marketplace.");
+		else consola.info("No marketplace credentials found.");
+	}
+});
+
+//#endregion
+//#region src/cli/commands/plugin.ts
+/**
+* emdash plugin
+*
+* Plugin management commands grouped under a single namespace.
+*
+* Subcommands:
+* - init: Scaffold a new plugin
+* - bundle: Bundle a plugin for marketplace distribution
+* - validate: Run bundle validation without producing a tarball
+* - publish: Publish a plugin to the marketplace
+* - login: Log in to the marketplace via GitHub
+* - logout: Log out of the marketplace
+*
+*/
+const pluginCommand = defineCommand({
+	meta: {
+		name: "plugin",
+		description: "Manage plugins"
+	},
+	subCommands: {
+		init: pluginInitCommand,
+		bundle: bundleCommand,
+		validate: pluginValidateCommand,
+		publish: publishCommand,
+		login: marketplaceLoginCommand,
+		logout: marketplaceLogoutCommand
+	}
+});
+
+//#endregion
+//#region src/cli/commands/schema.ts
+/**
+* emdash schema
+*
+* Manage collections and fields via the remote API
+*/
+const listCommand$1 = defineCommand({
+	meta: {
+		name: "list",
+		description: "List all collections"
+	},
+	args: { ...connectionArgs },
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).collections(), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const getCommand = defineCommand({
+	meta: {
+		name: "get",
+		description: "Get collection with fields"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).collection(args.collection), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const createCommand = defineCommand({
+	meta: {
+		name: "create",
+		description: "Create a collection"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		label: {
+			type: "string",
+			description: "Collection label",
+			required: true
+		},
+		"label-singular": {
+			type: "string",
+			description: "Singular label (defaults to label)"
+		},
+		description: {
+			type: "string",
+			description: "Collection description"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const data = await createClientFromArgs(args).createCollection({
+				slug: args.collection,
+				label: args.label,
+				labelSingular: args["label-singular"] || args.label,
+				description: args.description
+			});
+			consola$1.success(`Created collection "${args.collection}"`);
+			output(data, args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const deleteCommand = defineCommand({
+	meta: {
+		name: "delete",
+		description: "Delete a collection"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		force: {
+			type: "boolean",
+			description: "Skip confirmation"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			if (!args.force) {
+				if (!await consola$1.prompt(`Delete collection "${args.collection}"?`, { type: "confirm" })) {
+					consola$1.info("Cancelled");
+					return;
+				}
+			}
+			await createClientFromArgs(args).deleteCollection(args.collection);
+			consola$1.success(`Deleted collection "${args.collection}"`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const addFieldCommand = defineCommand({
+	meta: {
+		name: "add-field",
+		description: "Add a field to a collection"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		field: {
+			type: "positional",
+			description: "Field slug",
+			required: true
+		},
+		type: {
+			type: "string",
+			description: "Field type (string, text, number, integer, boolean, datetime, image, reference, portableText, json)",
+			required: true
+		},
+		label: {
+			type: "string",
+			description: "Field label"
+		},
+		required: {
+			type: "boolean",
+			description: "Whether the field is required"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const data = await createClientFromArgs(args).createField(args.collection, {
+				slug: args.field,
+				type: args.type,
+				label: args.label || args.field,
+				required: args.required
+			});
+			consola$1.success(`Added field "${args.field}" to "${args.collection}"`);
+			output(data, args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const removeFieldCommand = defineCommand({
+	meta: {
+		name: "remove-field",
+		description: "Remove a field from a collection"
+	},
+	args: {
+		collection: {
+			type: "positional",
+			description: "Collection slug",
+			required: true
+		},
+		field: {
+			type: "positional",
+			description: "Field slug",
+			required: true
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			await createClientFromArgs(args).deleteField(args.collection, args.field);
+			consola$1.success(`Removed field "${args.field}" from "${args.collection}"`);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const schemaCommand = defineCommand({
+	meta: {
+		name: "schema",
+		description: "Manage collections and fields"
+	},
+	subCommands: {
+		list: listCommand$1,
+		get: getCommand,
+		create: createCommand,
+		delete: deleteCommand,
+		"add-field": addFieldCommand,
+		"remove-field": removeFieldCommand
+	}
+});
+
+//#endregion
+//#region src/cli/commands/search-cmd.ts
+/**
+* emdash search
+*
+* Full-text search across content
+*/
+const searchCommand = defineCommand({
+	meta: {
+		name: "search",
+		description: "Full-text search across content"
+	},
+	args: {
+		query: {
+			type: "positional",
+			description: "Search query",
+			required: true
+		},
+		collection: {
+			type: "string",
+			alias: "c",
+			description: "Filter by collection"
+		},
+		locale: {
+			type: "string",
+			description: "Filter by locale"
+		},
+		limit: {
+			type: "string",
+			alias: "l",
+			description: "Maximum results to return"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).search(args.query, {
+				collection: args.collection,
+				locale: args.locale,
+				limit: args.limit ? parseInt(args.limit, 10) : void 0
+			}), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+
+//#endregion
+//#region src/cli/commands/secrets.ts
+/**
+* Secrets CLI commands
+*
+* Pure (no-DB) commands for working with EmDash secrets:
+*
+* - `emdash secrets generate` — emits a fresh `EMDASH_ENCRYPTION_KEY`.
+*   Optionally writes it to a local-secrets file (`.env`).
+* - `emdash secrets fingerprint <key>` — prints the kid for a key,
+*   useful in CI for verifying what's been deployed without exposing
+*   the raw value.
+*
+* DB-touching commands (`status`, `migrate`, `rotate`) live elsewhere:
+* the CLI process can't open the production D1/Postgres binding from
+* the operator's machine, so those operations ship as admin HTTP
+* endpoints in a later PR. A thin `--site <url>` wrapper for those
+* endpoints can land alongside.
+*/
+const KEY_VAR_NAME = "EMDASH_ENCRYPTION_KEY";
+/** Matches a populated entry — `KEY=<at least one char>`. */
+const POPULATED_KEY_LINE_PATTERN = /^EMDASH_ENCRYPTION_KEY=.+$/m;
+/**
+* Matches any line starting `KEY=` including `KEY=` with empty value.
+* Used for in-place replacement when the entry exists but has no value.
+*/
+const ANY_KEY_LINE_PATTERN = /^EMDASH_ENCRYPTION_KEY=.*$/m;
+/**
+* Append (or replace) `EMDASH_ENCRYPTION_KEY` in a dotenv-style file.
+*
+* Idempotent: if the entry exists with a populated value, leaves it alone
+* (returns `"skipped"`) unless `force` is set. An entry with an empty
+* value (`EMDASH_ENCRYPTION_KEY=`) is treated as "not set" and gets
+* replaced — placeholder lines aren't a reason to refuse.
+*
+* Always ends the resulting file with a trailing newline. Doesn't touch
+* other variables.
+*
+* Exported for tests.
+*/
+function writeEncryptionKeyToFile(targetPath, value, force) {
+	const existing = existsSync(targetPath) ? readFileSync(targetPath, "utf-8") : "";
+	if (POPULATED_KEY_LINE_PATTERN.test(existing) && !force) return "skipped";
+	const newLine = `${KEY_VAR_NAME}=${value}`;
+	let next;
+	if (ANY_KEY_LINE_PATTERN.test(existing)) {
+		next = existing.replace(ANY_KEY_LINE_PATTERN, newLine);
+		if (!next.endsWith("\n")) next += "\n";
+	} else next = `${existing}${existing.length === 0 ? "" : existing.endsWith("\n") ? "" : "\n"}${newLine}\n`;
+	writeFileSync(targetPath, next);
+	return "wrote";
+}
+const generateCommand = defineCommand({
+	meta: {
+		name: "generate",
+		description: "Generate a new EmDash encryption key"
+	},
+	args: {
+		write: {
+			type: "string",
+			description: "Optional path to write the key to (e.g. .env). Won't overwrite an existing entry without --force."
+		},
+		force: {
+			type: "boolean",
+			description: "When used with --write, overwrite an existing entry",
+			default: false
+		}
+	},
+	run({ args }) {
+		const value = generateEncryptionKey();
+		if (args.write) {
+			if (writeEncryptionKeyToFile(resolve(process.cwd(), args.write), value, args.force) === "skipped") {
+				consola$1.info(`${KEY_VAR_NAME} already set in ${pc.cyan(args.write)}; leaving it alone. Pass ${pc.bold("--force")} to replace it.`);
+				return;
+			}
+			consola$1.log("");
+			consola$1.log(`${pc.bold("Wrote")} ${pc.cyan(KEY_VAR_NAME)} to ${pc.cyan(args.write)}`);
+			consola$1.log("");
+			consola$1.log(pc.yellow("Keep this file out of version control. Losing the key means losing every secret encrypted with it."));
+			consola$1.log("");
+			return;
+		}
+		process.stdout.write(`${value}\n`);
+		const guidance = [
+			"",
+			pc.bold("EmDash encryption key generated."),
+			"",
+			`Set ${pc.cyan(KEY_VAR_NAME)} in your environment.`,
+			"For Cloudflare deployments, push it to your Worker's secrets.",
+			"For Node deployments, add it to your process environment or .env file.",
+			"",
+			pc.yellow("Keep this value secret. Losing it means losing every secret encrypted with it."),
+			""
+		].join("\n");
+		process.stderr.write(`${guidance}\n`);
+	}
+});
+const fingerprintCommand = defineCommand({
+	meta: {
+		name: "fingerprint",
+		description: "Print the kid (8-char fingerprint) for an encryption key"
+	},
+	args: { key: {
+		type: "positional",
+		description: "The full key value (with the emdash_enc_v1_ prefix)",
+		required: true
+	} },
+	async run({ args }) {
+		try {
+			const kid = await fingerprintKey(args.key);
+			process.stdout.write(`${kid}\n`);
+		} catch (error) {
+			consola$1.error(error instanceof EmDashSecretsError ? error.message : "Failed to fingerprint key");
+			process.exit(1);
+		}
+	}
+});
+const secretsCommand = defineCommand({
+	meta: {
+		name: "secrets",
+		description: "Manage EmDash secrets (generate, inspect)"
+	},
+	subCommands: {
+		generate: generateCommand,
+		fingerprint: fingerprintCommand
+	}
+});
+
+//#endregion
+//#region src/cli/commands/seed.ts
+/**
+* emdash seed
+*
+* Apply a seed file to the database
+*/
+async function fileExists(path) {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+async function readPackageJson(cwd) {
+	const pkgPath = resolve(cwd, "package.json");
+	try {
+		const content = await readFile(pkgPath, "utf-8");
+		return JSON.parse(content);
+	} catch {
+		return null;
+	}
+}
+/**
+* Resolve seed file path from:
+* 1. Positional argument (if provided)
+* 2. .emdash/seed.json (convention)
+* 3. package.json emdash.seed (config)
+*/
+async function resolveSeedPath(cwd, positional) {
+	if (positional) {
+		const resolved = resolve(cwd, positional);
+		if (await fileExists(resolved)) return resolved;
+		consola.error(`Seed file not found: ${positional}`);
+		return null;
+	}
+	const conventionPath = resolve(cwd, ".emdash", "seed.json");
+	if (await fileExists(conventionPath)) return conventionPath;
+	const pkg = await readPackageJson(cwd);
+	if (pkg?.emdash?.seed) {
+		const pkgSeedPath = resolve(cwd, pkg.emdash.seed);
+		if (await fileExists(pkgSeedPath)) return pkgSeedPath;
+		consola.warn(`Seed file from package.json not found: ${pkg.emdash.seed}`);
+	}
+	return null;
+}
+const seedCommand = defineCommand({
+	meta: {
+		name: "seed",
+		description: "Apply a seed file to the database"
+	},
+	args: {
+		path: {
+			type: "positional",
+			description: "Path to seed file (default: .emdash/seed.json)",
+			required: false
+		},
+		database: {
+			type: "string",
+			alias: "d",
+			description: "Database path",
+			default: "./data.db"
+		},
+		cwd: {
+			type: "string",
+			description: "Working directory",
+			default: process.cwd()
+		},
+		validate: {
+			type: "boolean",
+			description: "Validate only, don't apply",
+			default: false
+		},
+		"no-content": {
+			type: "boolean",
+			description: "Skip sample data (content entries, bylines, taxonomy terms)",
+			default: false
+		},
+		"on-conflict": {
+			type: "string",
+			description: "Conflict handling: skip, update, error",
+			default: "skip"
+		},
+		"uploads-dir": {
+			type: "string",
+			description: "Directory for media uploads",
+			default: "./uploads"
+		},
+		"media-base-url": {
+			type: "string",
+			description: "Base URL for media files",
+			default: "/_emdash/api/media/file"
+		}
+	},
+	async run({ args }) {
+		const cwd = resolve(args.cwd);
+		consola.start("Loading seed file...");
+		const seedPath = await resolveSeedPath(cwd, args.path);
+		if (!seedPath) {
+			consola.error("No seed file found");
+			consola.info("Provide a path, create .emdash/seed.json, or set emdash.seed in package.json");
+			process.exit(1);
+		}
+		consola.info(`Seed file: ${seedPath}`);
+		let seed;
+		try {
+			const content = await readFile(seedPath, "utf-8");
+			seed = JSON.parse(content);
+		} catch (error) {
+			consola.error("Failed to parse seed file:", error);
+			process.exit(1);
+		}
+		consola.start("Validating seed file...");
+		const validation = validateSeed(seed);
+		if (validation.warnings.length > 0) for (const warning of validation.warnings) consola.warn(warning);
+		if (!validation.valid) {
+			consola.error("Seed validation failed:");
+			for (const error of validation.errors) consola.error(`  - ${error}`);
+			process.exit(1);
+		}
+		consola.success("Seed file is valid");
+		if (args.validate) {
+			consola.success("Validation complete");
+			return;
+		}
+		const dbPath = resolve(cwd, args.database);
+		consola.info(`Database: ${dbPath}`);
+		const db = createDatabase({ url: `file:${dbPath}` });
+		consola.start("Running migrations...");
+		try {
+			const { applied } = await runMigrations(db);
+			if (applied.length > 0) consola.success(`Applied ${applied.length} migrations`);
+			else consola.info("Database up to date");
+		} catch (error) {
+			consola.error("Migration failed:", error);
+			await db.destroy();
+			process.exit(1);
+		}
+		const uploadsDir = resolve(cwd, args["uploads-dir"]);
+		await mkdir(uploadsDir, { recursive: true });
+		const storage = new LocalStorage({
+			directory: uploadsDir,
+			baseUrl: args["media-base-url"]
+		});
+		const onConflictRaw = args["on-conflict"];
+		if (onConflictRaw !== "skip" && onConflictRaw !== "update" && onConflictRaw !== "error") {
+			consola.error(`Invalid --on-conflict value: ${onConflictRaw}`);
+			consola.info("Use: skip, update, or error");
+			await db.destroy();
+			process.exit(1);
+		}
+		const options = {
+			includeContent: !args["no-content"],
+			onConflict: onConflictRaw,
+			storage
+		};
+		consola.start("Applying seed...");
+		try {
+			const result = await applySeed(db, seed, options);
+			consola.success("Seed applied successfully!");
+			consola.log("");
+			if (result.settings.applied > 0) consola.info(`Settings: ${result.settings.applied} applied`);
+			if (result.collections.created > 0 || result.collections.skipped > 0 || result.collections.updated > 0) consola.info(`Collections: ${result.collections.created} created, ${result.collections.skipped} skipped, ${result.collections.updated} updated`);
+			if (result.fields.created > 0 || result.fields.skipped > 0 || result.fields.updated > 0) consola.info(`Fields: ${result.fields.created} created, ${result.fields.skipped} skipped, ${result.fields.updated} updated`);
+			if (result.taxonomies.created > 0 || result.taxonomies.terms > 0) consola.info(`Taxonomies: ${result.taxonomies.created} created, ${result.taxonomies.terms} terms`);
+			if (result.bylines.created > 0 || result.bylines.skipped > 0 || result.bylines.updated > 0) consola.info(`Bylines: ${result.bylines.created} created, ${result.bylines.skipped} skipped, ${result.bylines.updated} updated`);
+			if (result.menus.created > 0 || result.menus.items > 0) consola.info(`Menus: ${result.menus.created} created, ${result.menus.items} items`);
+			if (result.widgetAreas.created > 0 || result.widgetAreas.widgets > 0) consola.info(`Widget Areas: ${result.widgetAreas.created} created, ${result.widgetAreas.widgets} widgets`);
+			if (result.content.created > 0 || result.content.skipped > 0 || result.content.updated > 0) consola.info(`Content: ${result.content.created} created, ${result.content.skipped} skipped, ${result.content.updated} updated`);
+			if (result.media.created > 0 || result.media.skipped > 0) consola.info(`Media: ${result.media.created} created, ${result.media.skipped} skipped`);
+		} catch (error) {
+			consola.error("Seed failed:", error instanceof Error ? error.message : error);
+			await db.destroy();
+			process.exit(1);
+		}
+		await db.destroy();
+		consola.success("Done!");
+	}
+});
+
+//#endregion
+//#region src/cli/commands/taxonomy.ts
+/**
+* emdash taxonomy
+*
+* Manage taxonomies and terms via the EmDash REST API.
+*/
+/** Pattern to replace whitespace with hyphens for slug generation */
+const WHITESPACE_PATTERN = /\s+/g;
+const listCommand = defineCommand({
+	meta: {
+		name: "list",
+		description: "List all taxonomies"
+	},
+	args: { ...connectionArgs },
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).taxonomies(), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const termsCommand = defineCommand({
+	meta: {
+		name: "terms",
+		description: "List terms in a taxonomy"
+	},
+	args: {
+		name: {
+			type: "positional",
+			description: "Taxonomy name",
+			required: true
+		},
+		limit: {
+			type: "string",
+			alias: "l",
+			description: "Maximum terms to return"
+		},
+		cursor: {
+			type: "string",
+			description: "Pagination cursor"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			output(await createClientFromArgs(args).terms(args.name, {
+				limit: args.limit ? parseInt(args.limit, 10) : void 0,
+				cursor: args.cursor
+			}), args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const addTermCommand = defineCommand({
+	meta: {
+		name: "add-term",
+		description: "Create a term in a taxonomy"
+	},
+	args: {
+		taxonomy: {
+			type: "positional",
+			description: "Taxonomy name",
+			required: true
+		},
+		name: {
+			type: "string",
+			description: "Term label",
+			required: true
+		},
+		slug: {
+			type: "string",
+			description: "Term slug (defaults to slugified name)"
+		},
+		parent: {
+			type: "string",
+			description: "Parent term ID"
+		},
+		...connectionArgs
+	},
+	async run({ args }) {
+		configureOutputMode(args);
+		try {
+			const client = createClientFromArgs(args);
+			const label = args.name;
+			const slug = args.slug || label.toLowerCase().replace(WHITESPACE_PATTERN, "-");
+			const term = await client.createTerm(args.taxonomy, {
+				slug,
+				label,
+				parentId: args.parent
+			});
+			consola$1.success(`Created term "${label}" in ${args.taxonomy}`);
+			output(term, args);
+		} catch (error) {
+			consola$1.error(error instanceof Error ? error.message : "Unknown error");
+			process.exit(1);
+		}
+	}
+});
+const taxonomyCommand = defineCommand({
+	meta: {
+		name: "taxonomy",
+		description: "Manage taxonomies and terms"
+	},
+	subCommands: {
+		list: listCommand,
+		terms: termsCommand,
+		"add-term": addTermCommand
+	}
+});
+
+//#endregion
+//#region src/cli/commands/types.ts
+/**
+* emdash types
+*
+* Fetch schema from an EmDash instance and generate TypeScript types
+*/
+const typesCommand = defineCommand({
+	meta: {
+		name: "types",
+		description: "Generate TypeScript types from schema"
+	},
+	args: {
+		...connectionArgs,
+		output: {
+			type: "string",
+			alias: "o",
+			description: "Output path for generated types",
+			default: ".emdash/types.ts"
+		},
+		cwd: {
+			type: "string",
+			description: "Working directory",
+			default: process.cwd()
+		}
+	},
+	async run({ args }) {
+		const cwd = resolve(args.cwd);
+		consola.start("Fetching schema...");
+		try {
+			const client = createClientFromArgs(args);
+			const schema = await client.schemaExport();
+			consola.success(`Found ${schema.collections.length} collections`);
+			const types = await client.schemaTypes();
+			const outputPath = resolve(cwd, args.output);
+			await mkdir(dirname(outputPath), { recursive: true });
+			await writeFile(outputPath, types, "utf-8");
+			consola.success(`Generated ${args.output}`);
+			await writeFile(resolve(dirname(outputPath), "schema.json"), JSON.stringify(schema, null, 2), "utf-8");
+			consola.info(`Schema version: ${schema.version}`);
+			consola.box({
+				title: "Types generated",
+				message: `${schema.collections.length} collections\n\nTypes: ${args.output}\nSchema: .emdash/schema.json`
+			});
+		} catch (error) {
+			consola.error("Failed to fetch schema:", error instanceof Error ? error.message : error);
+			process.exit(1);
+		}
+	}
+});
+
+//#endregion
+//#region src/cli/index.ts
+runMain(defineCommand({
+	meta: {
+		name: "emdash",
+		version: "0.0.0",
+		description: "CLI for EmDash CMS"
+	},
+	subCommands: {
+		init: initCommand,
+		types: typesCommand,
+		dev: devCommand,
+		doctor: doctorCommand,
+		seed: seedCommand,
+		migrate: migrateCommand,
+		"export-seed": exportSeedCommand,
+		secrets: secretsCommand,
+		auth: authCommand,
+		login: loginCommand,
+		logout: logoutCommand,
+		whoami: whoamiCommand,
+		content: contentCommand,
+		schema: schemaCommand,
+		media: mediaCommand,
+		search: searchCommand,
+		taxonomy: taxonomyCommand,
+		menu: menuCommand,
+		plugin: pluginCommand
+	}
+}));
+
+//#endregion
+export {  };
+//# sourceMappingURL=index.mjs.map

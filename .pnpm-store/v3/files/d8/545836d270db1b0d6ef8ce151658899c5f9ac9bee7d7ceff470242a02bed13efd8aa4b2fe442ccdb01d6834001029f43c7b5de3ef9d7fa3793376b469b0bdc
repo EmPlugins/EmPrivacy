@@ -1,0 +1,21 @@
+import { t as openNodeSqliteDatabase } from "../node-sqlite-compat-2sezm-Zd.mjs";
+import { SqliteDialect } from "kysely";
+
+//#region src/db/sqlite.ts
+/**
+* SQLite runtime adapter
+*
+* Creates a Kysely dialect for Node's built-in SQLite driver.
+* Loaded at runtime via virtual module.
+*/
+/**
+* Create a SQLite dialect from config
+*/
+function createDialect(config) {
+	const url = config.url;
+	return new SqliteDialect({ database: openNodeSqliteDatabase(url.startsWith("file:") ? url.slice(5) : url) });
+}
+
+//#endregion
+export { createDialect };
+//# sourceMappingURL=sqlite.mjs.map

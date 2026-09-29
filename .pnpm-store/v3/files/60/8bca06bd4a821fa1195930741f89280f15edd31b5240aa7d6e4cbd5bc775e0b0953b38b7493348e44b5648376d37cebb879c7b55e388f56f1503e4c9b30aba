@@ -1,0 +1,44 @@
+import "../../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../media-BBm8Wg3f.mjs";
+import "../../../../../fts-manager-iddym8cd.mjs";
+import "../../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../../activation-DyNTe_Tl.mjs";
+import "../../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../../media-usage-work-C5B1zT1c.mjs";
+import "../../../../../content-repair-CIMt5C0U.mjs";
+import { n as handleMediaUsageProgress, r as handleMediaUsageProgressAdvance } from "../../../../../media-usage-C1EswMTq.mjs";
+import { a as unwrapResult, i as requireDb } from "../../../../../error-BDcFyoRt.mjs";
+import "../../../../../api-tokens-B_lfpmH3.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+import { t as requireScope } from "../../../../../scopes-D5A1OZbq.mjs";
+
+//#region src/astro/routes/api/admin/media-usage/progress.ts
+const prerender = false;
+const GET = async ({ locals }) => {
+	const { emdash, user } = locals;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "schema:manage");
+	if (denied) return denied;
+	const scopeDenied = requireScope(locals, "admin");
+	if (scopeDenied) return scopeDenied;
+	return unwrapResult(await handleMediaUsageProgress(emdash.db));
+};
+const POST = async ({ locals }) => {
+	const { emdash, user } = locals;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "schema:manage");
+	if (denied) return denied;
+	const scopeDenied = requireScope(locals, "admin");
+	if (scopeDenied) return scopeDenied;
+	return unwrapResult(await handleMediaUsageProgressAdvance(emdash.db));
+};
+
+//#endregion
+export { GET, POST, prerender };
+//# sourceMappingURL=progress.mjs.map

@@ -1,0 +1,7 @@
+//#region src/version.ts
+const VERSION = "0.38.0";
+const COMMIT = "8975a850";
+
+//#endregion
+export { VERSION as n, COMMIT as t };
+//# sourceMappingURL=version-CK67_SXX.mjs.map

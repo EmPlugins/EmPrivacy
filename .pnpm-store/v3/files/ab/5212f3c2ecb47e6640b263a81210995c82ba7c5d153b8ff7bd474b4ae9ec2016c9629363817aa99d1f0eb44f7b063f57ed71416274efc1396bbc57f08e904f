@@ -1,0 +1,22 @@
+import { a as MigrationExecutorModule, c as MigrationTarget, i as MigrationExecutorFactoryContext, l as MigrationTargetOverrides, n as MigrationExecutor, o as MigrationReport, r as MigrationExecutorFactory, s as MigrationRequest, t as MigrationAction } from "../protocol-CLn58-nw.mjs";
+import { Dialect } from "kysely";
+
+//#region src/migrations/direct-executor.d.ts
+interface DirectMigrationExecutorOptions {
+  target: MigrationTarget;
+  createDialect: () => Dialect | Promise<Dialect>;
+}
+declare function createDirectMigrationExecutor(options: DirectMigrationExecutorOptions): MigrationExecutor;
+//#endregion
+//#region src/migrations/identity.d.ts
+interface CoreMigrationIdentity {
+  emdashVersion: string;
+  names: readonly string[];
+  fingerprint: string;
+}
+declare function fingerprintMigrationSet(emdashVersion: string, names: readonly string[]): Promise<string>;
+declare function createCoreMigrationIdentity(emdashVersion: string, names: readonly string[]): Promise<CoreMigrationIdentity>;
+declare function getCoreMigrationIdentity(): Promise<CoreMigrationIdentity>;
+//#endregion
+export { type CoreMigrationIdentity, type DirectMigrationExecutorOptions, type MigrationAction, type MigrationExecutor, type MigrationExecutorFactory, type MigrationExecutorFactoryContext, type MigrationExecutorModule, type MigrationReport, type MigrationRequest, type MigrationTarget, type MigrationTargetOverrides, createCoreMigrationIdentity, createDirectMigrationExecutor, fingerprintMigrationSet, getCoreMigrationIdentity };
+//# sourceMappingURL=index.d.mts.map

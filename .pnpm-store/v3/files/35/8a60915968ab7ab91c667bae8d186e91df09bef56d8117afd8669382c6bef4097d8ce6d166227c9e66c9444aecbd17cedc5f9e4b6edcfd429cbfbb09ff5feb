@@ -1,0 +1,59 @@
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import { n as apiSuccess, r as handleError, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../media-C1EIZKh1.mjs";
+import { M as usersListQuery } from "../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { Role } from "@emdash-cms/auth";
+import { createKyselyAdapter } from "@emdash-cms/auth/adapters/kysely";
+
+//#region src/astro/routes/api/admin/users/index.ts
+/**
+* User management list endpoint
+*
+* GET /_emdash/api/admin/users - List users with search, filter, pagination
+*/
+const prerender = false;
+const GET = async ({ url, locals }) => {
+	const { emdash, user } = locals;
+	if (!emdash?.db) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	if (!user || user.role < Role.ADMIN) return apiError("FORBIDDEN", "Admin privileges required", 403);
+	const adapter = createKyselyAdapter(emdash.db);
+	try {
+		const query = parseQuery(url, usersListQuery);
+		if (isParseError(query)) return query;
+		const result = await adapter.getUsers({
+			search: query.search,
+			role: query.role ? parseInt(query.role, 10) : void 0,
+			cursor: query.cursor,
+			limit: query.limit
+		});
+		return apiSuccess({
+			items: result.items.map((u) => ({
+				id: u.id,
+				email: u.email,
+				name: u.name,
+				avatarUrl: u.avatarUrl,
+				role: u.role,
+				emailVerified: u.emailVerified,
+				disabled: u.disabled,
+				createdAt: u.createdAt.toISOString(),
+				updatedAt: u.updatedAt.toISOString(),
+				lastLogin: u.lastLogin?.toISOString() ?? null,
+				credentialCount: u.credentialCount,
+				oauthProviders: u.oauthProviders
+			})),
+			nextCursor: result.nextCursor
+		});
+	} catch (error) {
+		return handleError(error, "Failed to list users", "USER_LIST_ERROR");
+	}
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=index.mjs.map

@@ -1,0 +1,47 @@
+import "../../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../after-CBU2vkoO.mjs";
+import "../../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../../slugify-B994zkXC.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../taxonomy-DP1vny4K.mjs";
+import "../../../../../resolve-Cy0aWSRj.mjs";
+import "../../../../../request-cache-DAZZmesc.mjs";
+import "../../../../../loader-WJi6GFRn.mjs";
+import "../../../../../collection-slugs-cache-7lTmNzeA.mjs";
+import "../../../../../taxonomies-NcFDq5Gg.mjs";
+import { i as handleTaxonomyGet, n as handleTaxonomyDefTranslations } from "../../../../../taxonomies-BOdxuZpV.mjs";
+import { a as unwrapResult, i as requireDb, r as handleError, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import { bt as localeFilterQuery } from "../../../../../media-C1EIZKh1.mjs";
+import "../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/taxonomies/[name]/translations.ts
+const prerender = false;
+const GET = async ({ params, request, locals }) => {
+	const { emdash, user } = locals;
+	const { name } = params;
+	if (!name) return apiError("VALIDATION_ERROR", "Taxonomy name required", 400);
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "taxonomies:read");
+	if (denied) return denied;
+	const query = parseQuery(new URL(request.url), localeFilterQuery);
+	if (isParseError(query)) return query;
+	try {
+		const anchor = await handleTaxonomyGet(emdash.db, name, { locale: query.locale });
+		if (!anchor.success) return unwrapResult(anchor);
+		return unwrapResult(await handleTaxonomyDefTranslations(emdash.db, anchor.data.taxonomy.id));
+	} catch (error) {
+		return handleError(error, "Failed to list taxonomy translations", "TAXONOMY_TRANSLATIONS_ERROR");
+	}
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=translations.mjs.map

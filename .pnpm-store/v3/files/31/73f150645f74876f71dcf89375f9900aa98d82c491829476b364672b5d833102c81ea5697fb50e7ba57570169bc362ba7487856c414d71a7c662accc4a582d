@@ -1,0 +1,61 @@
+import "../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../config-C3EBstHi.mjs";
+import "../../../../after-CBU2vkoO.mjs";
+import "../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../content-CNfMWuhY.mjs";
+import "../../../../slugify-B994zkXC.mjs";
+import "../../../../base64-CvLhUKQv.mjs";
+import "../../../../types-CQPWhPxE.mjs";
+import "../../../../request-cache-DAZZmesc.mjs";
+import "../../../../relation-DxgCHOBw.mjs";
+import "../../../../fts-manager-iddym8cd.mjs";
+import "../../../../collection-slugs-cache-7lTmNzeA.mjs";
+import "../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../activation-DyNTe_Tl.mjs";
+import "../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../registry-DTqaqxed.mjs";
+import { a as unwrapResult, i as requireDb, r as handleError } from "../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, n as parseBody, t as isParseError } from "../../../../parse-WRg5C3NX.mjs";
+import { bt as localeFilterQuery } from "../../../../media-C1EIZKh1.mjs";
+import "../../../../entry-lock-DIYHAaSw.mjs";
+import { t as createRelationBody } from "../../../../relations-rOmbndUJ.mjs";
+import "../../../../status-Cenfk_r5.mjs";
+import "../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../authorize-C2QHlWSS.mjs";
+import { i as handleRelationCreate, s as handleRelationList } from "../../../../relations-KKDSLUwS.mjs";
+
+//#region src/astro/routes/api/relations/index.ts
+const prerender = false;
+const GET = async ({ request, locals }) => {
+	const { emdash, user } = locals;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "schema:read");
+	if (denied) return denied;
+	const query = parseQuery(new URL(request.url), localeFilterQuery);
+	if (isParseError(query)) return query;
+	try {
+		return unwrapResult(await handleRelationList(emdash.db, { locale: query.locale }));
+	} catch (error) {
+		return handleError(error, "Failed to list relations", "RELATION_LIST_ERROR");
+	}
+};
+const POST = async ({ request, locals }) => {
+	const { emdash, user } = locals;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "schema:manage");
+	if (denied) return denied;
+	try {
+		const body = await parseBody(request, createRelationBody);
+		if (isParseError(body)) return body;
+		return unwrapResult(await handleRelationCreate(emdash.db, body), 201);
+	} catch (error) {
+		return handleError(error, "Failed to create relation", "RELATION_CREATE_ERROR");
+	}
+};
+
+//#endregion
+export { GET, POST, prerender };
+//# sourceMappingURL=index.mjs.map

@@ -1,0 +1,464 @@
+import { t as LOCALE_CODE_PATTERN } from "./config-C3EBstHi.mjs";
+import { t as isValidFocalPointUpdate } from "./focal-point-BeWFo6Xx.mjs";
+import { z } from "zod";
+
+//#region src/api/schemas/common.ts
+/** Valid role level values */
+const VALID_ROLE_LEVELS = new Set([
+	10,
+	20,
+	30,
+	40,
+	50
+]);
+/** Role level — coerces string/number to valid RoleLevel (10|20|30|40|50) */
+const roleLevel = z.coerce.number().int().refine((n) => VALID_ROLE_LEVELS.has(n), { message: "Invalid role level. Must be 10, 20, 30, 40, or 50" });
+/** Pagination query params — cursor-based */
+const cursorPaginationQuery = z.object({
+	cursor: z.string().max(2048).optional().meta({ description: "Opaque cursor for pagination" }),
+	limit: z.coerce.number().int().min(1).max(100).optional().default(50).meta({ description: "Maximum number of items to return (1-100, default 50)" })
+}).meta({ id: "CursorPaginationQuery" });
+/** Pagination query params — offset-based */
+const offsetPaginationQuery = z.object({
+	limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+	offset: z.coerce.number().int().min(0).optional().default(0)
+}).meta({ id: "OffsetPaginationQuery" });
+/** Slug pattern: lowercase letters, digits, underscores; starts with letter */
+const slugPattern = /^[a-z][a-z0-9_]*$/;
+/** Matches http(s) scheme at start of URL */
+const HTTP_SCHEME_RE = /^https?:\/\//i;
+/** Validates that a URL string uses http or https scheme. Rejects javascript:/data: URI XSS vectors. */
+const httpUrl = z.url().refine((url) => HTTP_SCHEME_RE.test(url), "URL must use http or https");
+/**
+* BCP 47 locale code — language with optional script/region subtags (e.g. en, en-US, pt-BR, es-419, zh-Hant).
+* Validation is case-insensitive, but the value is preserved verbatim because the site config, stored
+* `locale` columns, and public query path all keep the raw BCP-47 casing.
+*/
+const localeCode = z.string().regex(LOCALE_CODE_PATTERN, "Invalid locale code");
+/** Shared `?locale=xx` query shape for endpoints that filter by locale. */
+const localeFilterQuery = z.object({ locale: localeCode.optional() }).meta({ id: "LocaleFilterQuery" });
+/** Standard API error response */
+const apiErrorSchema = z.object({
+	success: z.literal(false).meta({ description: "Discriminant: always false for errors" }),
+	error: z.object({
+		code: z.string().meta({
+			description: "Machine-readable error code",
+			examples: ["NOT_FOUND"]
+		}),
+		message: z.string().meta({ description: "Human-readable error message" })
+	})
+}).meta({ id: "ApiError" });
+/** Wrap a data schema in the standard success envelope: { success: true, data: T } */
+function successEnvelope(dataSchema) {
+	return z.object({
+		success: z.literal(true).meta({ description: "Discriminant: always true for success" }),
+		data: dataSchema
+	});
+}
+/** Standard delete response */
+const deleteResponseSchema = z.object({ deleted: z.literal(true) }).meta({ id: "DeleteResponse" });
+/** Standard count response */
+const countResponseSchema = z.object({ count: z.number().int().min(0) }).meta({ id: "CountResponse" });
+
+//#endregion
+//#region src/api/schemas/media-usage.ts
+const mediaUsageCoverageStatusSchema = z.enum([
+	"complete",
+	"never",
+	"running",
+	"partial",
+	"failed",
+	"stale",
+	"unknown"
+]).meta({ id: "MediaUsageCoverageStatus" });
+const mediaUsageCoverageSchema = z.object({
+	scope: z.literal("all_content_collections"),
+	status: mediaUsageCoverageStatusSchema
+}).meta({ id: "MediaUsageCoverage" });
+const mediaUsageProgressSchema = z.object({
+	status: z.enum([
+		"indexing",
+		"ready",
+		"needs_attention"
+	]),
+	readyCollections: z.number().int().min(0),
+	totalCollections: z.number().int().min(0)
+}).meta({ id: "MediaUsageProgress" });
+const mediaUsageSummarySchema = z.object({
+	count: z.number().int().min(0).nullable(),
+	coverage: mediaUsageCoverageSchema
+}).meta({ id: "MediaUsageSummary" });
+const mediaUsageDetailsQuery = z.object({
+	cursor: z.string().min(1).max(2048).optional().meta({ description: "Opaque content-entry-group cursor" }),
+	limit: z.coerce.number().int().min(1).max(100).optional().default(50).meta({ description: "Maximum number of content entry groups to return (1-100, default 50)" })
+});
+const mediaUsageOccurrenceDetailSchema = z.object({
+	fieldSlug: z.string(),
+	fieldPath: z.string(),
+	occurrenceIndex: z.number().int().min(0),
+	referenceType: z.enum([
+		"image_field",
+		"file_field",
+		"portable_text_image",
+		"unknown"
+	])
+}).meta({ id: "MediaUsageOccurrenceDetail" });
+const mediaUsageSourceDetailSchema = z.object({
+	variant: z.enum(["columns", "draft_overlay"]),
+	occurrences: z.array(mediaUsageOccurrenceDetailSchema)
+}).meta({ id: "MediaUsageSourceDetail" });
+const mediaUsageEntryDetailSchema = z.object({
+	collection: z.string(),
+	contentId: z.string(),
+	title: z.string().nullable(),
+	slug: z.string().nullable(),
+	locale: z.string().nullable(),
+	status: z.string().nullable(),
+	scheduledAt: z.string().nullable(),
+	deletedAt: z.string().nullable(),
+	sources: z.array(mediaUsageSourceDetailSchema)
+}).meta({ id: "MediaUsageEntryDetail" });
+const mediaUsageDetailsResponseSchema = z.object({
+	items: z.array(mediaUsageEntryDetailSchema),
+	nextCursor: z.string().optional(),
+	coverage: mediaUsageCoverageSchema
+}).meta({ id: "MediaUsageDetailsResponse" });
+const mediaUsageRepairStatusSchema = z.enum([
+	"complete",
+	"partial",
+	"failed",
+	"stale"
+]).meta({ id: "MediaUsageRepairStatus" });
+const mediaUsageRepairCollectionBody = z.object({
+	scope: z.literal("collection"),
+	collection: z.string().min(1).max(63).regex(slugPattern, "Invalid collection slug")
+}).strict();
+const mediaUsageRepairAllBody = z.object({ scope: z.literal("all") }).strict();
+const mediaUsageRepairBody = z.discriminatedUnion("scope", [mediaUsageRepairCollectionBody, mediaUsageRepairAllBody]).meta({ id: "MediaUsageRepairBody" });
+const mediaUsageRepairCollectionSummarySchema = z.object({
+	collection: z.string(),
+	status: mediaUsageRepairStatusSchema,
+	indexedSourceCount: z.number().int().min(0),
+	failedSourceCount: z.number().int().min(0),
+	skippedSourceCount: z.number().int().min(0),
+	deletedSourceCount: z.number().int().min(0),
+	lastErrorCode: z.string().nullable(),
+	startedAt: z.string(),
+	completedAt: z.string().nullable()
+}).meta({ id: "MediaUsageRepairCollectionSummary" });
+const mediaUsageRepairResponseSchema = z.object({
+	status: mediaUsageRepairStatusSchema,
+	indexedSourceCount: z.number().int().min(0),
+	failedSourceCount: z.number().int().min(0),
+	skippedSourceCount: z.number().int().min(0),
+	deletedSourceCount: z.number().int().min(0),
+	collections: z.array(mediaUsageRepairCollectionSummarySchema)
+}).meta({ id: "MediaUsageRepairResponse" });
+const mediaUsageWorkStateSchema = z.enum([
+	"pending",
+	"retry",
+	"leased",
+	"failed"
+]).meta({ id: "MediaUsageWorkState" });
+const mediaUsageWorkListQuery = z.object({
+	collection: z.string().min(1).max(63).regex(slugPattern, "Invalid collection slug"),
+	state: mediaUsageWorkStateSchema.optional(),
+	cursor: z.string().min(1).max(2048).optional().meta({ description: "Opaque work-page cursor" }),
+	limit: z.coerce.number().int().min(1).max(100).optional().default(50).meta({ description: "Maximum number of work items to return (1-100, default 50)" })
+});
+const mediaUsageWorkItemSchema = z.object({
+	collectionId: z.string(),
+	collectionSlug: z.string(),
+	contentId: z.string(),
+	state: mediaUsageWorkStateSchema,
+	attemptCount: z.number().int().min(0),
+	nextAttemptAt: z.string(),
+	leaseExpiresAt: z.string().nullable(),
+	lastAttemptedAt: z.string().nullable(),
+	lastErrorCode: z.string().nullable(),
+	updatedAt: z.string()
+}).meta({ id: "MediaUsageWorkItem" });
+const mediaUsageWorkListResponseSchema = z.object({
+	items: z.array(mediaUsageWorkItemSchema),
+	nextCursor: z.string().optional()
+}).meta({ id: "MediaUsageWorkListResponse" });
+const boundedOpaqueMediaUsageId = z.string().min(1).max(2048);
+const mediaUsageWorkRetryBody = z.object({
+	collectionId: boundedOpaqueMediaUsageId.meta({ description: "Current immutable collection identity" }),
+	contentId: boundedOpaqueMediaUsageId.meta({ description: "Content entry identity, including a deleted entry" })
+}).strict().meta({ id: "MediaUsageWorkRetryBody" });
+const mediaUsageWorkRetryResponseSchema = z.object({
+	changed: z.boolean(),
+	item: mediaUsageWorkItemSchema
+}).meta({ id: "MediaUsageWorkRetryResponse" });
+const mediaUsageWorkRetryConflictSchema = z.object({
+	success: z.literal(false),
+	error: z.discriminatedUnion("code", [z.object({
+		code: z.literal("WORK_LEASE_ACTIVE"),
+		message: z.string(),
+		details: z.object({ leaseExpiresAt: z.string() })
+	}), z.object({
+		code: z.literal("WORK_CHANGED"),
+		message: z.string()
+	})])
+});
+const mediaUsageActivationStateSchema = z.enum([
+	"expanded",
+	"activating",
+	"active"
+]).meta({ id: "MediaUsageActivationState" });
+const mediaUsageActivationStatusSchema = z.object({
+	state: mediaUsageActivationStateSchema,
+	collectionCursor: z.string().nullable(),
+	attemptCount: z.number().int().min(0),
+	drainConfirmedAt: z.string().nullable(),
+	lastAttemptedAt: z.string().nullable(),
+	lastErrorCode: z.literal("MEDIA_USAGE_ACTIVATION_FAILED").nullable(),
+	leaseExpiresAt: z.string().nullable(),
+	activatedAt: z.string().nullable(),
+	updatedAt: z.string()
+}).meta({ id: "MediaUsageActivationStatus" });
+const mediaUsageActivationAdvanceBody = z.object({ writersDrained: z.literal(true) }).strict().meta({ id: "MediaUsageActivationAdvanceBody" });
+const mediaUsageActivationAdvanceResponseSchema = z.object({
+	outcome: z.enum(["activating", "active"]),
+	processedCollections: z.number().int().min(0).max(1),
+	activation: mediaUsageActivationStatusSchema
+}).meta({ id: "MediaUsageActivationAdvanceResponse" });
+const mediaUsageProgressAdvanceResponseSchema = z.object({
+	activation: mediaUsageActivationStatusSchema,
+	progress: mediaUsageProgressSchema.nullable(),
+	nextRequestInMs: z.union([
+		z.literal(0),
+		z.literal(3e4),
+		z.null()
+	])
+}).meta({ id: "MediaUsageProgressAdvanceResponse" });
+const mediaUsageActivationConflictSchema = z.object({
+	success: z.literal(false),
+	error: z.discriminatedUnion("code", [
+		z.object({
+			code: z.literal("MEDIA_USAGE_ACTIVATION_BUSY"),
+			message: z.string(),
+			details: z.object({ leaseExpiresAt: z.string() })
+		}),
+		z.object({
+			code: z.literal("MEDIA_USAGE_ACTIVATION_CONFLICT"),
+			message: z.string()
+		}),
+		z.object({
+			code: z.literal("MEDIA_USAGE_ACTIVATION_VERSION_MISMATCH"),
+			message: z.string()
+		})
+	])
+});
+const mediaUsageCollectionDeletionStateSchema = z.enum([
+	"pending",
+	"retry",
+	"leased",
+	"failed"
+]).meta({ id: "MediaUsageCollectionDeletionState" });
+const mediaUsageCollectionDeletionPhaseSchema = z.enum([
+	"fence",
+	"registry",
+	"table",
+	"work",
+	"sources",
+	"status",
+	"finalize"
+]).meta({ id: "MediaUsageCollectionDeletionPhase" });
+const mediaUsageCollectionDeletionListQuery = z.object({
+	state: mediaUsageCollectionDeletionStateSchema.optional().default("failed"),
+	cursor: z.string().min(1).max(2048).optional(),
+	limit: z.coerce.number().int().min(1).max(100).optional().default(50)
+}).meta({ id: "MediaUsageCollectionDeletionListQuery" });
+const mediaUsageCollectionDeletionItemSchema = z.object({
+	collectionId: z.string(),
+	collectionSlug: z.string(),
+	state: mediaUsageCollectionDeletionStateSchema,
+	phase: mediaUsageCollectionDeletionPhaseSchema,
+	attemptCount: z.number().int().min(0),
+	nextAttemptAt: z.string(),
+	leaseExpiresAt: z.string().nullable(),
+	lastErrorCode: z.string().nullable(),
+	updatedAt: z.string()
+}).meta({ id: "MediaUsageCollectionDeletionItem" });
+const mediaUsageCollectionDeletionListResponseSchema = z.object({
+	items: z.array(mediaUsageCollectionDeletionItemSchema),
+	nextCursor: z.string().optional()
+}).meta({ id: "MediaUsageCollectionDeletionListResponse" });
+const mediaUsageCollectionDeletionRetryBody = z.object({ collectionId: boundedOpaqueMediaUsageId }).strict().meta({ id: "MediaUsageCollectionDeletionRetryBody" });
+const mediaUsageCollectionDeletionRetryResponseSchema = z.object({
+	changed: z.boolean(),
+	item: mediaUsageCollectionDeletionItemSchema
+}).meta({ id: "MediaUsageCollectionDeletionRetryResponse" });
+
+//#endregion
+//#region src/api/schemas/media.ts
+/**
+* Accepts a comma-separated string (from URL query params) or an array of
+* strings (from JSON body or programmatic use) and normalises to string[].
+*/
+const mimeTypeFilter = z.union([z.string(), z.array(z.string())]).transform((v) => {
+	return (Array.isArray(v) ? v : v.split(",")).map((s) => s.trim()).filter((s) => s.length > 0);
+}).optional();
+const mediaListQuery = cursorPaginationQuery.extend({
+	page: z.coerce.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+	mimeType: mimeTypeFilter,
+	folderId: z.union([z.literal("unfiled"), z.string().min(1).max(64)]).optional().meta({ description: "Filter by a media folder ID. Use `unfiled` for the Main library; omit for all media." }),
+	q: z.string().trim().min(1).max(200).optional(),
+	includeUsage: z.literal("1").optional().meta({ description: "Include a coverage-aware usage summary on each media item" })
+}).refine(({ cursor, page }) => cursor === void 0 || page === void 0, {
+	message: "cursor and page cannot be used together",
+	path: ["page"]
+}).meta({ id: "MediaListQuery" });
+const mediaGetQuery = z.object({ includeUsage: z.literal("1").optional().meta({ description: "Include a coverage-aware usage summary on the media item" }) }).meta({ id: "MediaGetQuery" });
+const mediaUpdateBody = z.object({
+	alt: z.string().optional(),
+	caption: z.string().optional(),
+	width: z.number().int().positive().optional(),
+	height: z.number().int().positive().optional(),
+	folderId: z.union([z.literal("unfiled"), z.string().min(1).max(64)]).nullable().optional().transform((value) => value === "unfiled" ? null : value).meta({ description: "Assign a media folder ID, or use null or `unfiled` to return the item to the Main library." }),
+	focalX: z.number().min(0).max(1).nullable().optional(),
+	focalY: z.number().min(0).max(1).nullable().optional()
+}).superRefine((value, context) => {
+	if (!isValidFocalPointUpdate(value)) context.addIssue({
+		code: "custom",
+		message: "focalX and focalY must both be numbers or both be null",
+		path: ["focalX"]
+	});
+}).meta({ id: "MediaUpdateBody" });
+const mediaFolderIdSchema = z.string().min(1).max(64);
+const mediaFolderListQuery = cursorPaginationQuery.extend({ q: z.string().trim().min(1).max(200).optional() }).meta({ id: "MediaFolderListQuery" });
+const mediaFolderNameSchema = z.string().refine((value) => {
+	const length = value.trim().length;
+	return length >= 1 && length <= 200;
+}, { message: "Folder name must be between 1 and 200 characters" });
+const mediaFolderBody = z.object({ name: mediaFolderNameSchema }).meta({ id: "MediaFolderBody" });
+/** Default maximum allowed file upload size (50 MB). */
+const DEFAULT_MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+function formatFileSize(bytes) {
+	if (bytes < 1024) return `${bytes}B`;
+	if (bytes < 1024 * 1024) return `${Math.floor(bytes / 1024)}KB`;
+	return `${Math.floor(bytes / 1024 / 1024)}MB`;
+}
+const CONTENT_TYPE_RE = /^[a-z0-9][a-z0-9!#$&^_+\-.]*\/[a-z0-9!#$&^_+\-.]+(\s*;[^\r\n]*)?$/i;
+function mediaUploadUrlBody(maxSize) {
+	if (!Number.isFinite(maxSize) || maxSize <= 0) throw new Error(`EmDash: maxUploadSize must be a positive finite number, got ${maxSize}`);
+	return z.object({
+		filename: z.string().min(1, "filename is required"),
+		contentType: z.string().min(1, "contentType is required").regex(CONTENT_TYPE_RE, "Invalid content type"),
+		size: z.number().int().nonnegative().max(maxSize, `File size must not exceed ${formatFileSize(maxSize)}`),
+		contentHash: z.string().optional(),
+		fieldId: z.string().optional(),
+		deduplicate: z.boolean().optional(),
+		ensureUniqueFilename: z.boolean().optional(),
+		folderId: mediaFolderIdSchema.nullable().optional()
+	}).meta({ id: "MediaUploadUrlBody" });
+}
+const mediaUploadDeduplicateForm = z.enum(["true", "false"]).default("true").transform((value) => value === "true");
+const mediaUploadEnsureUniqueFilenameForm = z.enum(["true", "false"]).default("false").transform((value) => value === "true");
+const mediaReplaceMetadataForm = z.object({
+	width: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+	height: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+});
+const binaryFileSchema = z.string().meta({ format: "binary" });
+const mediaDirectUploadBody = z.object({
+	file: binaryFileSchema,
+	width: z.string().optional(),
+	height: z.string().optional(),
+	thumbnail: binaryFileSchema.optional(),
+	fieldId: z.string().optional(),
+	deduplicate: z.enum(["true", "false"]).optional(),
+	ensureUniqueFilename: z.enum(["true", "false"]).optional(),
+	folderId: z.union([mediaFolderIdSchema, z.literal("unfiled")]).optional()
+}).meta({ id: "MediaDirectUploadBody" });
+const mediaReplaceBody = z.object({
+	file: binaryFileSchema,
+	width: z.number().int().positive(),
+	height: z.number().int().positive()
+}).meta({ id: "MediaReplaceBody" });
+const mediaConfirmBody = z.object({
+	size: z.number().int().nonnegative().optional(),
+	width: z.number().int().positive().optional(),
+	height: z.number().int().positive().optional()
+}).meta({ id: "MediaConfirmBody" });
+const mediaProviderListQuery = cursorPaginationQuery.extend({
+	query: z.string().optional(),
+	mimeType: mimeTypeFilter
+}).meta({ id: "MediaProviderListQuery" });
+const mediaStatusSchema = z.enum([
+	"pending",
+	"ready",
+	"failed"
+]);
+const mediaItemSchema = z.object({
+	id: z.string(),
+	filename: z.string(),
+	mimeType: z.string(),
+	size: z.number().nullable(),
+	width: z.number().nullable(),
+	height: z.number().nullable(),
+	focalX: z.number().nullable(),
+	focalY: z.number().nullable(),
+	alt: z.string().nullable(),
+	caption: z.string().nullable(),
+	storageKey: z.string(),
+	status: mediaStatusSchema,
+	contentHash: z.string().nullable(),
+	blurhash: z.string().nullable(),
+	dominantColor: z.string().nullable(),
+	createdAt: z.string(),
+	authorId: z.string().nullable(),
+	folderId: z.string().nullable()
+}).meta({ id: "MediaItem" });
+const mediaFolderSchema = z.object({
+	id: z.string(),
+	name: z.string()
+}).meta({ id: "MediaFolder" });
+const mediaFolderResponseSchema = z.object({ item: mediaFolderSchema }).meta({ id: "MediaFolderResponse" });
+const mediaFolderListResponseSchema = z.object({
+	items: z.array(mediaFolderSchema),
+	nextCursor: z.string().optional()
+}).meta({ id: "MediaFolderListResponse" });
+const mediaResponseSchema = z.object({ item: mediaItemSchema }).meta({ id: "MediaResponse" });
+const mediaReadItemSchema = mediaItemSchema.extend({ usage: mediaUsageSummarySchema.optional() }).meta({ id: "MediaReadItem" });
+const mediaReadResponseSchema = z.object({ item: mediaReadItemSchema }).meta({ id: "MediaReadResponse" });
+const mediaListReadItemSchema = mediaReadItemSchema.extend({ url: z.string() }).meta({ id: "MediaListReadItem" });
+const mediaListReadResponseSchema = z.object({
+	items: z.array(mediaListReadItemSchema),
+	nextCursor: z.string().optional(),
+	totalCount: z.number().int().nonnegative().optional()
+}).meta({ id: "MediaListReadResponse" });
+const mediaListResponseSchema = z.object({
+	items: z.array(mediaItemSchema),
+	nextCursor: z.string().optional(),
+	totalCount: z.number().int().nonnegative().optional()
+}).meta({ id: "MediaListResponse" });
+const mediaUploadUrlResponseSchema = z.object({
+	uploadUrl: z.string(),
+	method: z.literal("PUT"),
+	headers: z.record(z.string(), z.string()),
+	mediaId: z.string(),
+	storageKey: z.string(),
+	expiresAt: z.string()
+}).meta({ id: "MediaUploadUrlResponse" });
+const mediaExistingResponseSchema = z.object({
+	existing: z.literal(true),
+	mediaId: z.string(),
+	storageKey: z.string(),
+	url: z.string()
+}).meta({ id: "MediaExistingResponse" });
+const mediaConfirmResponseSchema = z.object({ item: mediaItemSchema.extend({ url: z.string() }) }).meta({ id: "MediaConfirmResponse" });
+const mediaUploadResponseSchema = z.object({
+	item: mediaItemSchema.extend({ url: z.string() }),
+	deduplicated: z.literal(true).optional()
+}).meta({ id: "MediaUploadResponse" });
+const mediaReplaceResponseSchema = z.object({ item: mediaItemSchema.extend({ url: z.string() }) }).meta({ id: "MediaReplaceResponse" });
+const mediaStreamUploadResponseSchema = z.object({
+	uploaded: z.literal(true),
+	size: z.number().int().nonnegative()
+}).meta({ id: "MediaStreamUploadResponse" });
+
+//#endregion
+export { mediaUsageProgressSchema as $, mediaUploadEnsureUniqueFilenameForm as A, mediaUsageCollectionDeletionListQuery as B, mediaReplaceBody as C, slugPattern as Ct, mediaStreamUploadResponseSchema as D, mediaResponseSchema as E, mediaUsageActivationAdvanceResponseSchema as F, mediaUsageCollectionDeletionStateSchema as G, mediaUsageCollectionDeletionPhaseSchema as H, mediaUsageActivationConflictSchema as I, mediaUsageDetailsQuery as J, mediaUsageCoverageSchema as K, mediaUsageActivationStateSchema as L, mediaUploadUrlBody as M, mediaUploadUrlResponseSchema as N, mediaUpdateBody as O, mediaUsageActivationAdvanceBody as P, mediaUsageProgressAdvanceResponseSchema as Q, mediaUsageActivationStatusSchema as R, mediaReadResponseSchema as S, roleLevel as St, mediaReplaceResponseSchema as T, mediaUsageCollectionDeletionRetryBody as U, mediaUsageCollectionDeletionListResponseSchema as V, mediaUsageCollectionDeletionRetryResponseSchema as W, mediaUsageEntryDetailSchema as X, mediaUsageDetailsResponseSchema as Y, mediaUsageOccurrenceDetailSchema as Z, mediaListReadItemSchema as _, deleteResponseSchema as _t, mediaConfirmResponseSchema as a, mediaUsageSummarySchema as at, mediaProviderListQuery as b, localeFilterQuery as bt, mediaFolderBody as c, mediaUsageWorkListResponseSchema as ct, mediaFolderListResponseSchema as d, mediaUsageWorkRetryResponseSchema as dt, mediaUsageRepairBody as et, mediaFolderResponseSchema as f, mediaUsageWorkStateSchema as ft, mediaListQuery as g, cursorPaginationQuery as gt, mediaItemSchema as h, countResponseSchema as ht, mediaConfirmBody as i, mediaUsageSourceDetailSchema as it, mediaUploadResponseSchema as j, mediaUploadDeduplicateForm as k, mediaFolderIdSchema as l, mediaUsageWorkRetryBody as lt, mediaGetQuery as m, apiErrorSchema as mt, DEFAULT_MAX_UPLOAD_SIZE as n, mediaUsageRepairResponseSchema as nt, mediaDirectUploadBody as o, mediaUsageWorkItemSchema as ot, mediaFolderSchema as p, VALID_ROLE_LEVELS as pt, mediaUsageCoverageStatusSchema as q, formatFileSize as r, mediaUsageRepairStatusSchema as rt, mediaExistingResponseSchema as s, mediaUsageWorkListQuery as st, CONTENT_TYPE_RE as t, mediaUsageRepairCollectionSummarySchema as tt, mediaFolderListQuery as u, mediaUsageWorkRetryConflictSchema as ut, mediaListReadResponseSchema as v, httpUrl as vt, mediaReplaceMetadataForm as w, successEnvelope as wt, mediaReadItemSchema as x, offsetPaginationQuery as xt, mediaListResponseSchema as y, localeCode as yt, mediaUsageCollectionDeletionItemSchema as z };
+//# sourceMappingURL=media-C1EIZKh1.mjs.map

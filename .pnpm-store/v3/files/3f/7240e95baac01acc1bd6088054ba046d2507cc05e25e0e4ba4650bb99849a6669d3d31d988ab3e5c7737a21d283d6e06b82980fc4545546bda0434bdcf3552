@@ -1,0 +1,56 @@
+{
+  "name": "@atcute/crypto",
+  "version": "2.4.4",
+  "description": "lightweight atproto cryptographic library",
+  "keywords": [
+    "atproto",
+    "cryptography",
+    "k256",
+    "nistp256",
+    "p256",
+    "secp256k1"
+  ],
+  "license": "0BSD",
+  "repository": {
+    "url": "https://github.com/mary-ext/atcute",
+    "directory": "packages/utilities/crypto"
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.{test,bench}.*"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "imports": {
+    "#keypairs/secp256k1": {
+      "bun": "./dist/keypairs/secp256k1-web.js",
+      "deno": "./dist/keypairs/secp256k1-deno.js",
+      "node": "./dist/keypairs/secp256k1-node.js",
+      "default": "./dist/keypairs/secp256k1-web.js"
+    }
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@noble/secp256k1": "^3.1.0",
+    "@atcute/multibase": "^1.2.5",
+    "@atcute/uint8array": "^1.1.5"
+  },
+  "devDependencies": {
+    "@noble/curves": "^2.2.0",
+    "@types/node": "^26.1.1",
+    "@vitest/browser-playwright": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10",
+    "playwright": "^1.61.1",
+    "vitest": "^4.1.10"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "prepublish": "rm -rf dist; pnpm run build"
+  }
+}

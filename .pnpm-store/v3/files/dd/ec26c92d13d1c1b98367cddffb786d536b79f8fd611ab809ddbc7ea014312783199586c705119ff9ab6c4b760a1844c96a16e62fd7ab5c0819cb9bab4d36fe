@@ -1,0 +1,3 @@
+import * as v from '@atcute/lexicons/validations';
+const _hostStatusSchema = /*#__PURE__*/ v.string();
+export const hostStatusSchema = _hostStatusSchema;

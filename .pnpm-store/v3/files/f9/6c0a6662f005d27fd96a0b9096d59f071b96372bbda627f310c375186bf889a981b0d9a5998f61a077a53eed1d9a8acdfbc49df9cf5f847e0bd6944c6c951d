@@ -1,0 +1,13 @@
+import type { Did } from '@atcute/lexicons/syntax';
+/**
+ * checks if input is a did:web identifier, note that you should probably use `isAtprotoWebDid` for
+ * atproto-related cases as atproto only supports a subset of the did:web specification (namely, no custom
+ * paths)
+ */
+export declare const isWebDid: (input: unknown) => input is Did<'web'>;
+/** checks if input is a did:web identifier that is supported by atproto */
+export declare const isAtprotoWebDid: (input: unknown) => input is Did<'web'>;
+/** normalize a did:web identifier */
+export declare const normalizeWebDid: (did: Did<'web'>) => Did<'web'>;
+/** converts did:web identifier into the DID document's URL */
+export declare const webDidToDocumentUrl: (did: Did<'web'>) => URL;

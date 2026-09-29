@@ -1,0 +1,98 @@
+import "../../../../config-C3EBstHi.mjs";
+import "../../../../base64-CvLhUKQv.mjs";
+import "../../../../types-CQPWhPxE.mjs";
+import { t as MediaRepository } from "../../../../media-BBm8Wg3f.mjs";
+import { n as normalizeMime, t as matchesMimeAllowlist } from "../../../../mime-DYpsOAny.mjs";
+import { n as apiSuccess, r as handleError, t as apiError } from "../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../parse-WRg5C3NX.mjs";
+import { M as mediaUploadUrlBody, n as DEFAULT_MAX_UPLOAD_SIZE } from "../../../../media-C1EIZKh1.mjs";
+import "../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../relations-rOmbndUJ.mjs";
+import "../../../../status-Cenfk_r5.mjs";
+import "../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../authorize-C2QHlWSS.mjs";
+import { n as resolveFieldAllowlist, t as GLOBAL_UPLOAD_ALLOWLIST } from "../../../../media-allowlist-elXJgb_K.mjs";
+import { ulid } from "ulidx";
+import * as path from "node:path";
+
+//#region src/astro/routes/api/media/upload-url.ts
+/**
+* Media upload URL endpoint
+*
+* POST /_emdash/api/media/upload-url
+*
+* Returns a signed URL for direct upload to storage.
+* Creates a pending media record that must be confirmed after upload.
+*/
+const prerender = false;
+function isUnsupportedSignedUpload(error) {
+	return error instanceof Error && "code" in error && error.code === "NOT_SUPPORTED";
+}
+/**
+* Get a signed upload URL for direct-to-storage upload
+*/
+const POST = async ({ request, locals }) => {
+	const { emdash, user } = locals;
+	const denied = requirePerm(user, "media:upload");
+	if (denied) return denied;
+	if (!emdash?.storage) return apiError("NO_STORAGE", "Storage not configured. Signed URL uploads require S3-compatible storage.", 501);
+	if (!emdash?.db) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	try {
+		const maxSize = emdash.config.maxUploadSize ?? DEFAULT_MAX_UPLOAD_SIZE;
+		if (!Number.isFinite(maxSize) || maxSize <= 0) return apiError("CONFIGURATION_ERROR", "Invalid maxUploadSize configuration. Expected a positive finite number.", 500);
+		const body = await parseBody(request, mediaUploadUrlBody(maxSize));
+		if (isParseError(body)) return body;
+		const normalizedContentType = normalizeMime(body.contentType);
+		const allowlist = (body.fieldId ? await resolveFieldAllowlist(emdash.db, body.fieldId) : null) ?? [...GLOBAL_UPLOAD_ALLOWLIST];
+		if (!matchesMimeAllowlist(body.contentType, allowlist)) return apiError("INVALID_TYPE", "File type not allowed", 400);
+		const repo = new MediaRepository(emdash.db);
+		if (body.deduplicate !== false && body.contentHash && body.size > 0) {
+			const existing = await repo.findByContentHash(body.contentHash);
+			if (existing && existing.mimeType === normalizedContentType && existing.size === body.size) return apiSuccess({
+				existing: true,
+				mediaId: existing.id,
+				storageKey: existing.storageKey,
+				url: `/_emdash/api/media/file/${existing.storageKey}`
+			});
+		}
+		const filename = body.ensureUniqueFilename ? await repo.findAvailableFilename(body.filename) : body.filename;
+		const storageKey = `${ulid()}${path.extname(filename) || ""}`;
+		let signedUrl;
+		try {
+			signedUrl = await emdash.storage.getSignedUploadUrl({
+				key: storageKey,
+				contentType: body.contentType,
+				size: body.size,
+				expiresIn: 3600
+			});
+		} catch (error) {
+			if (!isUnsupportedSignedUpload(error)) throw error;
+			signedUrl = null;
+		}
+		const mediaItem = await repo.createPending({
+			filename,
+			mimeType: normalizedContentType,
+			size: body.size,
+			storageKey,
+			authorId: user?.id,
+			folderId: body.folderId
+		});
+		return apiSuccess({
+			uploadUrl: signedUrl?.url ?? `/_emdash/api/media/${mediaItem.id}/upload`,
+			method: signedUrl?.method ?? "PUT",
+			headers: signedUrl?.headers ?? {
+				"Content-Type": normalizedContentType,
+				"X-EmDash-Request": "1"
+			},
+			mediaId: mediaItem.id,
+			storageKey,
+			expiresAt: signedUrl?.expiresAt ?? new Date(Date.now() + 3600 * 1e3).toISOString()
+		});
+	} catch (error) {
+		return handleError(error, "Failed to generate upload URL", "UPLOAD_URL_ERROR");
+	}
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=upload-url.mjs.map

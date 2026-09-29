@@ -1,0 +1,3 @@
+/** represents a content identifier (CID) */
+export type Cid = string;
+export declare const isCid: (input: unknown) => input is Cid;

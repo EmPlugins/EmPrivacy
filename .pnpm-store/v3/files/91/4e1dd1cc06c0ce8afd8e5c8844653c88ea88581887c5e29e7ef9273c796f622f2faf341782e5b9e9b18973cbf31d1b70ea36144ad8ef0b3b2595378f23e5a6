@@ -1,0 +1,72 @@
+import "../../../../config-C3EBstHi.mjs";
+import "../../../../after-CBU2vkoO.mjs";
+import "../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../base64-CvLhUKQv.mjs";
+import "../../../../types-CQPWhPxE.mjs";
+import { n as handleMenuDelete, r as handleMenuGet, u as handleMenuUpdate } from "../../../../menus-UdwjHZJC.mjs";
+import { t as menuTag } from "../../../../chrome-tags-DzDQBCjX.mjs";
+import { a as unwrapResult, r as handleError } from "../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, n as parseBody, t as isParseError } from "../../../../parse-WRg5C3NX.mjs";
+import { bt as localeFilterQuery } from "../../../../media-C1EIZKh1.mjs";
+import { vt as updateMenuBody } from "../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../relations-rOmbndUJ.mjs";
+import "../../../../status-Cenfk_r5.mjs";
+import "../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/menus/[name].ts
+const prerender = false;
+const GET = async ({ params, request, locals }) => {
+	const { emdash, user } = locals;
+	const name = params.name;
+	const denied = requirePerm(user, "menus:read");
+	if (denied) return denied;
+	const query = parseQuery(new URL(request.url), localeFilterQuery);
+	if (isParseError(query)) return query;
+	try {
+		return unwrapResult(await handleMenuGet(emdash.db, name, { locale: query.locale }));
+	} catch (error) {
+		return handleError(error, "Failed to fetch menu", "MENU_GET_ERROR");
+	}
+};
+const PUT = async ({ params, request, locals, cache }) => {
+	const { emdash, user } = locals;
+	const name = params.name;
+	const denied = requirePerm(user, "menus:manage");
+	if (denied) return denied;
+	const query = parseQuery(new URL(request.url), localeFilterQuery);
+	if (isParseError(query)) return query;
+	try {
+		const body = await parseBody(request, updateMenuBody);
+		if (isParseError(body)) return body;
+		const result = await handleMenuUpdate(emdash.db, name, {
+			...body,
+			locale: query.locale
+		});
+		if (!result.success) return unwrapResult(result);
+		if (cache?.enabled) await cache.invalidate({ tags: [menuTag(name)] });
+		return unwrapResult(result);
+	} catch (error) {
+		return handleError(error, "Failed to update menu", "MENU_UPDATE_ERROR");
+	}
+};
+const DELETE = async ({ params, request, locals, cache }) => {
+	const { emdash, user } = locals;
+	const name = params.name;
+	const denied = requirePerm(user, "menus:manage");
+	if (denied) return denied;
+	const query = parseQuery(new URL(request.url), localeFilterQuery);
+	if (isParseError(query)) return query;
+	try {
+		const result = await handleMenuDelete(emdash.db, name, { locale: query.locale });
+		if (!result.success) return unwrapResult(result);
+		if (cache?.enabled) await cache.invalidate({ tags: [menuTag(name)] });
+		return unwrapResult(result);
+	} catch (error) {
+		return handleError(error, "Failed to delete menu", "MENU_DELETE_ERROR");
+	}
+};
+
+//#endregion
+export { DELETE, GET, PUT, prerender };
+//# sourceMappingURL=_name_.mjs.map

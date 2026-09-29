@@ -1,0 +1,403 @@
+import { a as resolveConfiguredLocale } from "./config-C3EBstHi.mjs";
+import { t as ContentRepository } from "./content-CNfMWuhY.mjs";
+import { i as InvalidCursorError } from "./types-CQPWhPxE.mjs";
+import { t as RelationRepository } from "./relation-DxgCHOBw.mjs";
+import { n as SchemaRegistry } from "./registry-DTqaqxed.mjs";
+
+//#region src/api/handlers/relations.ts
+/** Map an edge-read failure: a bad pagination cursor is a 400 client error,
+* everything else is the generic 500-shaped reference-read error. */
+function referencesGetError(error) {
+	if (error instanceof InvalidCursorError) return {
+		success: false,
+		error: {
+			code: "INVALID_CURSOR",
+			message: error.message
+		}
+	};
+	return {
+		success: false,
+		error: {
+			code: "REFERENCES_GET_ERROR",
+			message: "Failed to get references"
+		}
+	};
+}
+/** True for SQLite UNIQUE / Postgres unique_violation messages (matches the
+* fingerprint used in the content handlers). Narrow enough not to catch NOT
+* NULL / CHECK violations whose messages also say "constraint". */
+function isUniqueViolation(error) {
+	const message = error instanceof Error ? error.message.toLowerCase() : "";
+	return message.includes("unique constraint failed") || message.includes("duplicate key");
+}
+async function handleRelationCreate(db, input) {
+	try {
+		const repo = new RelationRepository(db);
+		if (!input.translationOf) {
+			if (!input.parentCollection || !input.childCollection) return {
+				success: false,
+				error: {
+					code: "VALIDATION_ERROR",
+					message: "parentCollection and childCollection are required unless translationOf is set"
+				}
+			};
+			const registry = new SchemaRegistry(db);
+			for (const collection of [input.parentCollection, input.childCollection]) if (!await registry.getCollection(collection)) return {
+				success: false,
+				error: {
+					code: "COLLECTION_NOT_FOUND",
+					message: `Collection '${collection}' not found`
+				}
+			};
+		}
+		return {
+			success: true,
+			data: { relation: await repo.create({
+				...input,
+				locale: input.locale ? resolveConfiguredLocale(input.locale) : void 0
+			}) }
+		};
+	} catch (error) {
+		if (error instanceof Error && error.message.includes("Source relation for translation not found")) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Source relation for translation not found"
+			}
+		};
+		if (isUniqueViolation(error)) return {
+			success: false,
+			error: {
+				code: "CONFLICT",
+				message: "A relation with this name or locale already exists"
+			}
+		};
+		return {
+			success: false,
+			error: {
+				code: "RELATION_CREATE_ERROR",
+				message: "Failed to create relation"
+			}
+		};
+	}
+}
+async function handleRelationGet(db, id) {
+	try {
+		const relation = await new RelationRepository(db).findById(id);
+		if (!relation) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		return {
+			success: true,
+			data: { relation }
+		};
+	} catch {
+		return {
+			success: false,
+			error: {
+				code: "RELATION_GET_ERROR",
+				message: "Failed to get relation"
+			}
+		};
+	}
+}
+async function handleRelationList(db, opts) {
+	try {
+		const repo = new RelationRepository(db);
+		const locale = opts.locale ? resolveConfiguredLocale(opts.locale) : void 0;
+		return {
+			success: true,
+			data: { relations: await repo.list(locale) }
+		};
+	} catch {
+		return {
+			success: false,
+			error: {
+				code: "RELATION_LIST_ERROR",
+				message: "Failed to list relations"
+			}
+		};
+	}
+}
+async function handleRelationUpdate(db, id, input) {
+	try {
+		const relation = await new RelationRepository(db).update(id, input);
+		if (!relation) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		return {
+			success: true,
+			data: { relation }
+		};
+	} catch {
+		return {
+			success: false,
+			error: {
+				code: "RELATION_UPDATE_ERROR",
+				message: "Failed to update relation"
+			}
+		};
+	}
+}
+async function handleRelationDelete(db, id) {
+	try {
+		if (!await new RelationRepository(db).delete(id)) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		return {
+			success: true,
+			data: { deleted: true }
+		};
+	} catch {
+		return {
+			success: false,
+			error: {
+				code: "RELATION_DELETE_ERROR",
+				message: "Failed to delete relation"
+			}
+		};
+	}
+}
+async function handleRelationTranslations(db, id) {
+	try {
+		const repo = new RelationRepository(db);
+		const relation = await repo.findById(id);
+		if (!relation) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		const siblings = await repo.findTranslations(relation.translationGroup);
+		return {
+			success: true,
+			data: {
+				translationGroup: relation.translationGroup,
+				translations: siblings.map((r) => ({
+					id: r.id,
+					name: r.name,
+					locale: r.locale,
+					parentLabel: r.parentLabel,
+					childLabel: r.childLabel
+				}))
+			}
+		};
+	} catch {
+		return {
+			success: false,
+			error: {
+				code: "RELATION_TRANSLATIONS_ERROR",
+				message: "Failed to get translations"
+			}
+		};
+	}
+}
+/** Resolve a relation from an id OR its translation_group. */
+async function resolveRelation(repo, idOrGroup) {
+	const byId = await repo.findById(idOrGroup);
+	if (byId) return byId;
+	return (await repo.findTranslations(idOrGroup))[0] ?? null;
+}
+/**
+* Pick the locale variant matching `locale`, falling back to the first entry
+* (lowest locale code). The fallback is intentional — an edge is keyed by
+* `translation_group`, so a referenced entry that exists only in another locale
+* is still a real reference — but the returned ref carries the variant's actual
+* `locale` so callers never mistake a fallback for the requested locale.
+*/
+function pickVariant(items, locale) {
+	return items.find((i) => i.locale === locale) ?? items[0];
+}
+/**
+* Resolve edge groups to loadable entries in `collection` at `locale`.
+* Dangling groups (no surviving entry) are skipped — cleanup is a later slice.
+*
+* All groups are loaded in one batched query (chunked at `SQL_BATCH_SIZE`)
+* rather than a `findTranslations` per edge, so a parent with N children costs
+* a constant number of queries, not N+1. Edge order (the caller's `sort_order`)
+* is preserved by iterating `edges`.
+*
+* `includeDrafts` is false for callers without `content:read_drafts`: the load
+* is restricted to published entries so a draft/scheduled entry referenced by an
+* edge is skipped exactly like a dangling one, never leaking its id/slug/locale.
+*/
+async function resolveEntries(content, collection, edges, pick, locale, includeDrafts) {
+	const groups = edges.map(pick);
+	const all = await content.findTranslationsForGroups(collection, groups, { publishedOnly: !includeDrafts });
+	const variantsByGroup = /* @__PURE__ */ new Map();
+	for (const item of all) {
+		if (item.translationGroup == null) continue;
+		const list = variantsByGroup.get(item.translationGroup);
+		if (list) list.push(item);
+		else variantsByGroup.set(item.translationGroup, [item]);
+	}
+	const refs = [];
+	for (const edge of edges) {
+		const variants = variantsByGroup.get(pick(edge));
+		if (!variants) continue;
+		const entry = pickVariant(variants, locale);
+		if (!entry) continue;
+		refs.push({
+			id: entry.id,
+			slug: entry.slug,
+			collection,
+			locale: entry.locale,
+			sortOrder: edge.sortOrder
+		});
+	}
+	return refs;
+}
+async function handleReferenceChildrenGet(db, collection, entryId, relation, page = {}, includeDrafts = false) {
+	try {
+		const repo = new RelationRepository(db);
+		const content = new ContentRepository(db);
+		const rel = await resolveRelation(repo, relation);
+		if (!rel) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		if (collection !== rel.parentCollection) return {
+			success: false,
+			error: {
+				code: "VALIDATION_ERROR",
+				message: "Entry is not the parent side of this relation"
+			}
+		};
+		const entry = await content.findByIdOrSlug(collection, entryId);
+		if (!entry?.translationGroup || !includeDrafts && entry.status !== "published") return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Content entry not found"
+			}
+		};
+		const edges = await repo.getChildrenPage(rel.translationGroup, entry.translationGroup, page);
+		return {
+			success: true,
+			data: {
+				children: await resolveEntries(content, rel.childCollection, edges.items, (e) => e.childGroup, entry.locale, includeDrafts),
+				nextCursor: edges.nextCursor
+			}
+		};
+	} catch (error) {
+		return referencesGetError(error);
+	}
+}
+async function handleReferenceChildrenSet(db, collection, entryId, relation, childIds) {
+	try {
+		const repo = new RelationRepository(db);
+		const content = new ContentRepository(db);
+		const rel = await resolveRelation(repo, relation);
+		if (!rel) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		if (collection !== rel.parentCollection) return {
+			success: false,
+			error: {
+				code: "VALIDATION_ERROR",
+				message: "Entry is not the parent side of this relation"
+			}
+		};
+		const entry = await content.findByIdOrSlug(collection, entryId);
+		if (!entry?.translationGroup) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Content entry not found"
+			}
+		};
+		const resolvedChildren = await content.findManyByIdOrSlug(rel.childCollection, childIds);
+		const childGroups = [];
+		for (const childId of childIds) {
+			const child = resolvedChildren.get(childId);
+			if (!child?.translationGroup) return {
+				success: false,
+				error: {
+					code: "NOT_FOUND",
+					message: `Child entry '${childId}' not found in ${rel.childCollection}`
+				}
+			};
+			childGroups.push(child.translationGroup);
+		}
+		await repo.setChildren(rel.translationGroup, entry.translationGroup, childGroups);
+		const edges = await repo.getChildrenPage(rel.translationGroup, entry.translationGroup);
+		return {
+			success: true,
+			data: {
+				children: await resolveEntries(content, rel.childCollection, edges.items, (e) => e.childGroup, entry.locale, true),
+				nextCursor: edges.nextCursor
+			}
+		};
+	} catch {
+		return {
+			success: false,
+			error: {
+				code: "REFERENCES_SET_ERROR",
+				message: "Failed to set references"
+			}
+		};
+	}
+}
+async function handleReferenceParentsGet(db, collection, entryId, relation, page = {}, includeDrafts = false) {
+	try {
+		const repo = new RelationRepository(db);
+		const content = new ContentRepository(db);
+		const rel = await resolveRelation(repo, relation);
+		if (!rel) return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Relation not found"
+			}
+		};
+		if (collection !== rel.childCollection) return {
+			success: false,
+			error: {
+				code: "VALIDATION_ERROR",
+				message: "Entry is not the child side of this relation"
+			}
+		};
+		const entry = await content.findByIdOrSlug(collection, entryId);
+		if (!entry?.translationGroup || !includeDrafts && entry.status !== "published") return {
+			success: false,
+			error: {
+				code: "NOT_FOUND",
+				message: "Content entry not found"
+			}
+		};
+		const edges = await repo.getParentsPage(rel.translationGroup, entry.translationGroup, page);
+		return {
+			success: true,
+			data: {
+				parents: await resolveEntries(content, rel.parentCollection, edges.items, (e) => e.parentGroup, entry.locale, includeDrafts),
+				nextCursor: edges.nextCursor
+			}
+		};
+	} catch (error) {
+		return referencesGetError(error);
+	}
+}
+
+//#endregion
+export { handleRelationDelete as a, handleRelationTranslations as c, handleRelationCreate as i, handleRelationUpdate as l, handleReferenceChildrenSet as n, handleRelationGet as o, handleReferenceParentsGet as r, handleRelationList as s, handleReferenceChildrenGet as t };
+//# sourceMappingURL=relations-KKDSLUwS.mjs.map

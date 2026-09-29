@@ -1,0 +1,3 @@
+/** represents a timestamp identifier (TID) */
+export type Tid = string;
+export declare const isTid: (input: unknown) => input is Tid;

@@ -1,0 +1,58 @@
+import "../../../../../options-D8Y0VHc7.mjs";
+import "../../../../../types-tJWDK__M.mjs";
+import "../../../../../types-BouXpOsa.mjs";
+import "../../../../../entry-lock-CGAtrwAR.mjs";
+import "../../../../../config-CGAhyOjP.mjs";
+import "../../../../../runner-CfwysRM0.mjs";
+import { t as fetchPluginTaxonomies } from "../../../../../index-1ECYpfiF.mjs";
+import { f as NormalizedItem, s as ImportConfig, u as ImportResult } from "../../../../../types-DaEg7KX2.mjs";
+import "../../../../../hreflang-CQpu5bMy.mjs";
+import "../../../../../validate-Df6Dvwbw.mjs";
+import { EmDashHandlers, EmDashManifest } from "../../../../types.mjs";
+import { t as TaxonomyImportPlan } from "../../../../../wxr-taxonomies-BX4yQL9s.mjs";
+import { APIRoute } from "astro";
+
+//#region src/astro/routes/api/import/wordpress-plugin/execute.d.ts
+declare const prerender = false;
+interface WpPluginImportConfig extends ImportConfig {
+  /** Author mappings (WP author login -> EmDash user ID) */
+  authorMappings?: Record<string, string | null>;
+  /** Wizard toggles. Absent means enabled (older admins don't send them). */
+  importMenus?: boolean;
+  importSiteTitle?: boolean;
+  importLogo?: boolean;
+  importSeo?: boolean;
+}
+interface WpPluginImportResponse {
+  success: boolean;
+  result?: ImportResult;
+  error?: {
+    message: string;
+  };
+}
+declare const POST: APIRoute;
+/**
+ * Coerce a WordPress meta value to an EmDash field type. WP postmeta is
+ * stringly typed and inconsistent across posts (the same key can hold
+ * "5", 5, "", or false). Returns `undefined` when the value can't
+ * reasonably represent the target type — the caller drops it.
+ */
+declare function coerceToFieldType(value: unknown, fieldType: string): unknown;
+/**
+ * Create EmDash taxonomy defs for custom WP taxonomies (e.g. CPT taxonomies
+ * like `company` or `plattform`) that don't exist yet, scoped to the
+ * collections the enabled post-type mappings target. Returns the names of
+ * the defs created. Runs before term pre-import so the terms and per-post
+ * assignments flow through the existing machinery instead of being dropped
+ * as `missingTaxonomies`.
+ */
+declare function ensureCustomTaxonomyDefs(db: EmDashHandlers["db"], taxonomies: Awaited<ReturnType<typeof fetchPluginTaxonomies>>, config: WpPluginImportConfig): Promise<string[]>;
+/** Exported for tests (field auto-creation regression coverage). */
+declare function importContent(items: AsyncIterable<NormalizedItem> | Iterable<NormalizedItem>, config: WpPluginImportConfig, emdash: EmDashHandlers, manifest: EmDashManifest, taxonomyPlan: TaxonomyImportPlan | undefined, seedTranslationGroups?: Map<string, string>): Promise<{
+  result: ImportResult;
+  contentIdMap: Map<number, string>;
+  collectionByWpId: Map<number, string>;
+}>;
+//#endregion
+export { POST, WpPluginImportConfig, WpPluginImportResponse, coerceToFieldType, ensureCustomTaxonomyDefs, importContent, prerender };
+//# sourceMappingURL=execute.d.mts.map

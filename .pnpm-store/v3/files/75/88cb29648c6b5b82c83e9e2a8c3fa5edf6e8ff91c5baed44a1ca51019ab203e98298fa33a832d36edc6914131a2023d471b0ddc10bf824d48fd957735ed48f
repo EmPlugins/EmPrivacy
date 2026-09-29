@@ -1,0 +1,10 @@
+import type { AtprotoDid, Handle } from '@atcute/lexicons/syntax';
+import type { HandleResolver, ResolveHandleOptions } from '../../types.ts';
+export interface WellKnownHandleResolverOptions {
+    fetch?: typeof fetch;
+}
+export declare class WellKnownHandleResolver implements HandleResolver {
+    #private;
+    constructor({ fetch: fetchThis }?: WellKnownHandleResolverOptions);
+    resolve(handle: Handle, options?: ResolveHandleOptions): Promise<AtprotoDid>;
+}

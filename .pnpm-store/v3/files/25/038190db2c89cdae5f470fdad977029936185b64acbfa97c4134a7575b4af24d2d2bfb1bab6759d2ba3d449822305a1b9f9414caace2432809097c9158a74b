@@ -1,0 +1,34 @@
+//#region src/i18n/config.d.ts
+/**
+ * EmDash i18n Configuration
+ *
+ * Reads locale configuration from the virtual module (sourced from Astro config).
+ * Initialized during runtime startup, then available via getI18nConfig().
+ */
+interface I18nConfig {
+  defaultLocale: string;
+  locales: string[];
+  fallback?: Record<string, string>;
+  prefixDefaultLocale?: boolean;
+}
+/**
+ * Get the current i18n config.
+ * Returns null if i18n is not configured.
+ */
+declare function getI18nConfig(): I18nConfig | null;
+/** Resolve the locale for a new content row. */
+declare function resolveContentCreateLocale(locale: unknown, config?: I18nConfig | null): string;
+/**
+ * Check if i18n is enabled.
+ * Returns true when multiple locales are configured.
+ */
+declare function isI18nEnabled(): boolean;
+/**
+ * Resolve fallback locale chain for a given locale.
+ * Returns array of locales to try, from most preferred to least.
+ * Always ends with defaultLocale.
+ */
+declare function getFallbackChain(locale: string): string[];
+//#endregion
+export { resolveContentCreateLocale as a, isI18nEnabled as i, getFallbackChain as n, getI18nConfig as r, I18nConfig as t };
+//# sourceMappingURL=config-ChFzshGd.d.mts.map

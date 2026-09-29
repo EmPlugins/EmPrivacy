@@ -1,0 +1,161 @@
+import { t as __exportAll } from "../../../../../../chunk-BYypO7fO.js";
+import * as v from "@atcute/lexicons/validations";
+
+//#region src/generated/types/com/emdashcms/experimental/package/releaseExtension.ts
+var releaseExtension_exports = /* @__PURE__ */ __exportAll({
+	contentAccessSchema: () => contentAccessSchema,
+	contentReadConstraintsSchema: () => contentReadConstraintsSchema,
+	contentWriteConstraintsSchema: () => contentWriteConstraintsSchema,
+	declaredAccessSchema: () => declaredAccessSchema,
+	emailAccessSchema: () => emailAccessSchema,
+	emailEventsConstraintsSchema: () => emailEventsConstraintsSchema,
+	emailSendConstraintsSchema: () => emailSendConstraintsSchema,
+	emailTransportConstraintsSchema: () => emailTransportConstraintsSchema,
+	mainSchema: () => mainSchema,
+	mediaAccessSchema: () => mediaAccessSchema,
+	mediaReadConstraintsSchema: () => mediaReadConstraintsSchema,
+	mediaWriteConstraintsSchema: () => mediaWriteConstraintsSchema,
+	networkAccessSchema: () => networkAccessSchema,
+	networkRequestConstraintsSchema: () => networkRequestConstraintsSchema,
+	pageAccessSchema: () => pageAccessSchema,
+	pageFragmentsConstraintsSchema: () => pageFragmentsConstraintsSchema,
+	provenanceSchema: () => provenanceSchema,
+	taxonomiesAccessSchema: () => taxonomiesAccessSchema,
+	taxonomiesReadConstraintsSchema: () => taxonomiesReadConstraintsSchema,
+	usersAccessSchema: () => usersAccessSchema,
+	usersReadConstraintsSchema: () => usersReadConstraintsSchema
+});
+const _contentAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#contentAccess")),
+	get read() {
+		return /* @__PURE__ */ v.optional(contentReadConstraintsSchema);
+	},
+	get write() {
+		return /* @__PURE__ */ v.optional(contentWriteConstraintsSchema);
+	}
+});
+const _contentReadConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#contentReadConstraints")) });
+const _contentWriteConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#contentWriteConstraints")) });
+const _declaredAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#declaredAccess")),
+	get content() {
+		return /* @__PURE__ */ v.optional(contentAccessSchema);
+	},
+	get email() {
+		return /* @__PURE__ */ v.optional(emailAccessSchema);
+	},
+	get media() {
+		return /* @__PURE__ */ v.optional(mediaAccessSchema);
+	},
+	get network() {
+		return /* @__PURE__ */ v.optional(networkAccessSchema);
+	},
+	get page() {
+		return /* @__PURE__ */ v.optional(pageAccessSchema);
+	},
+	get taxonomies() {
+		return /* @__PURE__ */ v.optional(taxonomiesAccessSchema);
+	},
+	get users() {
+		return /* @__PURE__ */ v.optional(usersAccessSchema);
+	}
+});
+const _emailAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#emailAccess")),
+	get events() {
+		return /* @__PURE__ */ v.optional(emailEventsConstraintsSchema);
+	},
+	get send() {
+		return /* @__PURE__ */ v.optional(emailSendConstraintsSchema);
+	},
+	get transport() {
+		return /* @__PURE__ */ v.optional(emailTransportConstraintsSchema);
+	}
+});
+const _emailEventsConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#emailEventsConstraints")) });
+const _emailSendConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#emailSendConstraints")) });
+const _emailTransportConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#emailTransportConstraints")) });
+const _mainSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension")),
+	get declaredAccess() {
+		return declaredAccessSchema;
+	},
+	get provenance() {
+		return /* @__PURE__ */ v.optional(provenanceSchema);
+	}
+});
+const _mediaAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#mediaAccess")),
+	get read() {
+		return /* @__PURE__ */ v.optional(mediaReadConstraintsSchema);
+	},
+	get write() {
+		return /* @__PURE__ */ v.optional(mediaWriteConstraintsSchema);
+	}
+});
+const _mediaReadConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#mediaReadConstraints")) });
+const _mediaWriteConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#mediaWriteConstraints")) });
+const _networkAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#networkAccess")),
+	get request() {
+		return /* @__PURE__ */ v.optional(networkRequestConstraintsSchema);
+	}
+});
+const _networkRequestConstraintsSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#networkRequestConstraints")),
+	allowedHosts: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.constrain(/* @__PURE__ */ v.array(/* @__PURE__ */ v.constrain(/* @__PURE__ */ v.string(), [/* @__PURE__ */ v.stringLength(0, 256)])), [/* @__PURE__ */ v.arrayLength(1, 64)]))
+});
+const _pageAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#pageAccess")),
+	get fragments() {
+		return /* @__PURE__ */ v.optional(pageFragmentsConstraintsSchema);
+	}
+});
+const _pageFragmentsConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#pageFragmentsConstraints")) });
+const _provenanceSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#provenance")),
+	builderId: /* @__PURE__ */ v.constrain(/* @__PURE__ */ v.genericUriString(), [/* @__PURE__ */ v.stringLength(0, 1024)]),
+	checksum: /* @__PURE__ */ v.constrain(/* @__PURE__ */ v.string(), [/* @__PURE__ */ v.stringLength(0, 256)]),
+	predicateType: /* @__PURE__ */ v.constrain(/* @__PURE__ */ v.string(), [/* @__PURE__ */ v.stringLength(0, 1024)]),
+	sourceRepository: /* @__PURE__ */ v.constrain(/* @__PURE__ */ v.genericUriString(), [/* @__PURE__ */ v.stringLength(0, 1024)]),
+	url: /* @__PURE__ */ v.constrain(/* @__PURE__ */ v.genericUriString(), [/* @__PURE__ */ v.stringLength(0, 2048)])
+});
+const _taxonomiesAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#taxonomiesAccess")),
+	get read() {
+		return /* @__PURE__ */ v.optional(taxonomiesReadConstraintsSchema);
+	}
+});
+const _taxonomiesReadConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#taxonomiesReadConstraints")) });
+const _usersAccessSchema = /* @__PURE__ */ v.object({
+	$type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#usersAccess")),
+	get read() {
+		return /* @__PURE__ */ v.optional(usersReadConstraintsSchema);
+	}
+});
+const _usersReadConstraintsSchema = /* @__PURE__ */ v.object({ $type: /* @__PURE__ */ v.optional(/* @__PURE__ */ v.literal("com.emdashcms.experimental.package.releaseExtension#usersReadConstraints")) });
+const contentAccessSchema = _contentAccessSchema;
+const contentReadConstraintsSchema = _contentReadConstraintsSchema;
+const contentWriteConstraintsSchema = _contentWriteConstraintsSchema;
+const declaredAccessSchema = _declaredAccessSchema;
+const emailAccessSchema = _emailAccessSchema;
+const emailEventsConstraintsSchema = _emailEventsConstraintsSchema;
+const emailSendConstraintsSchema = _emailSendConstraintsSchema;
+const emailTransportConstraintsSchema = _emailTransportConstraintsSchema;
+const mainSchema = _mainSchema;
+const mediaAccessSchema = _mediaAccessSchema;
+const mediaReadConstraintsSchema = _mediaReadConstraintsSchema;
+const mediaWriteConstraintsSchema = _mediaWriteConstraintsSchema;
+const networkAccessSchema = _networkAccessSchema;
+const networkRequestConstraintsSchema = _networkRequestConstraintsSchema;
+const pageAccessSchema = _pageAccessSchema;
+const pageFragmentsConstraintsSchema = _pageFragmentsConstraintsSchema;
+const provenanceSchema = _provenanceSchema;
+const taxonomiesAccessSchema = _taxonomiesAccessSchema;
+const taxonomiesReadConstraintsSchema = _taxonomiesReadConstraintsSchema;
+const usersAccessSchema = _usersAccessSchema;
+const usersReadConstraintsSchema = _usersReadConstraintsSchema;
+
+//#endregion
+export { contentAccessSchema, contentReadConstraintsSchema, contentWriteConstraintsSchema, declaredAccessSchema, emailAccessSchema, emailEventsConstraintsSchema, emailSendConstraintsSchema, emailTransportConstraintsSchema, mainSchema, mediaAccessSchema, mediaReadConstraintsSchema, mediaWriteConstraintsSchema, networkAccessSchema, networkRequestConstraintsSchema, pageAccessSchema, pageFragmentsConstraintsSchema, provenanceSchema, releaseExtension_exports as t, taxonomiesAccessSchema, taxonomiesReadConstraintsSchema, usersAccessSchema, usersReadConstraintsSchema };
+//# sourceMappingURL=releaseExtension.js.map

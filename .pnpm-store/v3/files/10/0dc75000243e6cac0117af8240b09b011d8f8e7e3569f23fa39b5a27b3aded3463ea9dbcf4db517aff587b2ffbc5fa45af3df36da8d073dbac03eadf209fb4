@@ -1,0 +1,23 @@
+import "../../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../../types-CQPWhPxE.mjs";
+import "../../../../../../byline-registry-BxDGIO0I.mjs";
+import { a as unwrapResult, i as requireDb, t as apiError } from "../../../../../../error-BDcFyoRt.mjs";
+import { r as requirePerm } from "../../../../../../authorize-C2QHlWSS.mjs";
+import { s as handleBylineFieldUsage } from "../../../../../../byline-fields-DPVRFMz2.mjs";
+
+//#region src/astro/routes/api/admin/byline-fields/[slug]/usage.ts
+const prerender = false;
+const GET = async ({ params, locals }) => {
+	const { emdash, user } = locals;
+	const denied = requirePerm(user, "schema:read");
+	if (denied) return denied;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const slug = params.slug;
+	if (!slug) return apiError("MISSING_PARAM", "Field slug is required", 400);
+	return unwrapResult(await handleBylineFieldUsage(emdash.db, slug));
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=usage.mjs.map

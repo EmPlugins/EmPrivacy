@@ -1,0 +1,49 @@
+import "../../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../after-CBU2vkoO.mjs";
+import "../../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../../slugify-B994zkXC.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../taxonomy-DP1vny4K.mjs";
+import "../../../../../resolve-Cy0aWSRj.mjs";
+import "../../../../../request-cache-DAZZmesc.mjs";
+import { r as taxonomyTag } from "../../../../../chrome-tags-DzDQBCjX.mjs";
+import "../../../../../loader-WJi6GFRn.mjs";
+import "../../../../../collection-slugs-cache-7lTmNzeA.mjs";
+import "../../../../../taxonomies-NcFDq5Gg.mjs";
+import { d as handleTermReorder } from "../../../../../taxonomies-BOdxuZpV.mjs";
+import { a as unwrapResult, i as requireDb, r as handleError, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../media-C1EIZKh1.mjs";
+import { J as reorderTermsBody } from "../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/taxonomies/[name]/reorder.ts
+const prerender = false;
+const POST = async ({ params, request, locals, cache }) => {
+	const { emdash, user } = locals;
+	const { name } = params;
+	if (!name) return apiError("VALIDATION_ERROR", "Taxonomy name required", 400);
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "taxonomies:manage");
+	if (denied) return denied;
+	try {
+		const body = await parseBody(request, reorderTermsBody);
+		if (isParseError(body)) return body;
+		const result = await handleTermReorder(emdash.db, name, body);
+		if (!result.success) return unwrapResult(result);
+		if (cache?.enabled) await cache.invalidate({ tags: [taxonomyTag(name)] });
+		return unwrapResult(result);
+	} catch (error) {
+		return handleError(error, "Failed to reorder terms", "TERM_REORDER_ERROR");
+	}
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=reorder.mjs.map

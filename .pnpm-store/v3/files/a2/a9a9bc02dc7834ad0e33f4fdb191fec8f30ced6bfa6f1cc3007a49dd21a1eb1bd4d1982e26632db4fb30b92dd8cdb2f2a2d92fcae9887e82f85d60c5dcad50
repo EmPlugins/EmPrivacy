@@ -1,0 +1,41 @@
+import "../../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../after-CBU2vkoO.mjs";
+import "../../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../../content-CNfMWuhY.mjs";
+import "../../../../../slugify-B994zkXC.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../request-cache-DAZZmesc.mjs";
+import "../../../../../relation-DxgCHOBw.mjs";
+import "../../../../../fts-manager-iddym8cd.mjs";
+import "../../../../../collection-slugs-cache-7lTmNzeA.mjs";
+import "../../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../../activation-DyNTe_Tl.mjs";
+import "../../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../../registry-DTqaqxed.mjs";
+import { a as unwrapResult, i as requireDb, r as handleError, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+import { c as handleRelationTranslations } from "../../../../../relations-KKDSLUwS.mjs";
+
+//#region src/astro/routes/api/relations/[id]/translations.ts
+const prerender = false;
+const GET = async ({ params, locals }) => {
+	const { emdash, user } = locals;
+	const { id } = params;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "schema:read");
+	if (denied) return denied;
+	if (!id) return apiError("VALIDATION_ERROR", "Relation id required", 400);
+	try {
+		return unwrapResult(await handleRelationTranslations(emdash.db, id));
+	} catch (error) {
+		return handleError(error, "Failed to get translations", "RELATION_TRANSLATIONS_ERROR");
+	}
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=translations.mjs.map

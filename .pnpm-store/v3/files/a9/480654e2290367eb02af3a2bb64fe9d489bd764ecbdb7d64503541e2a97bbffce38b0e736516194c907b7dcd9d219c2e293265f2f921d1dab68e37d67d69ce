@@ -1,0 +1,11 @@
+import { o as LibsqlConfig } from "../adapters-DCEgOBXi.mjs";
+import { Dialect } from "kysely";
+
+//#region src/db/libsql.d.ts
+/**
+ * Create a libSQL dialect from config
+ */
+declare function createDialect(config: LibsqlConfig): Dialect;
+//#endregion
+export { createDialect };
+//# sourceMappingURL=libsql.d.mts.map

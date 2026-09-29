@@ -1,0 +1,49 @@
+import "../../../../../options-D8Y0VHc7.mjs";
+import "../../../../../types-tJWDK__M.mjs";
+import "../../../../../types-BouXpOsa.mjs";
+import "../../../../../entry-lock-CGAtrwAR.mjs";
+import "../../../../../config-CGAhyOjP.mjs";
+import "../../../../../runner-CfwysRM0.mjs";
+import "../../../../../index-1ECYpfiF.mjs";
+import "../../../../../types-DaEg7KX2.mjs";
+import "../../../../../hreflang-CQpu5bMy.mjs";
+import "../../../../../validate-Df6Dvwbw.mjs";
+import { EmDashHandlers } from "../../../../types.mjs";
+import { AttachmentInfo } from "./analyze.mjs";
+import { APIRoute } from "astro";
+
+//#region src/astro/routes/api/import/wordpress/media.d.ts
+declare const prerender = false;
+/** Progress update sent during streaming */
+interface MediaImportProgress {
+  type: "progress";
+  current: number;
+  total: number;
+  filename?: string;
+  status: "downloading" | "uploading" | "done" | "skipped" | "failed";
+  error?: string;
+}
+/** Final result sent at end of stream */
+interface MediaImportResult {
+  type?: "result";
+  /** Successfully imported items */
+  imported: Array<{
+    wpId?: number;
+    originalUrl: string;
+    newUrl: string;
+    mediaId: string;
+  }>;
+  /** Failed items */
+  failed: Array<{
+    wpId?: number;
+    originalUrl: string;
+    error: string;
+  }>;
+  /** Map of old URLs to new URLs (for content rewriting) */
+  urlMap: Record<string, string>;
+}
+declare const POST: APIRoute;
+declare function importMediaWithProgress(attachments: AttachmentInfo[], db: NonNullable<EmDashHandlers["db"]>, storage: NonNullable<EmDashHandlers["storage"]>, onProgress: (progress: MediaImportProgress) => void): Promise<MediaImportResult>;
+//#endregion
+export { MediaImportProgress, MediaImportResult, POST, importMediaWithProgress, prerender };
+//# sourceMappingURL=media.d.mts.map

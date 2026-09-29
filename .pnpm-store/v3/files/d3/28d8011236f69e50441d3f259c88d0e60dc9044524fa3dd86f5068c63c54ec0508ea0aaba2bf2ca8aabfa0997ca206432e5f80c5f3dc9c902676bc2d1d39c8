@@ -1,0 +1,102 @@
+import "../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../config-C3EBstHi.mjs";
+import "../../../../after-CBU2vkoO.mjs";
+import "../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../content-CNfMWuhY.mjs";
+import "../../../../slugify-B994zkXC.mjs";
+import "../../../../base64-CvLhUKQv.mjs";
+import "../../../../types-CQPWhPxE.mjs";
+import "../../../../media-BBm8Wg3f.mjs";
+import "../../../../taxonomy-DP1vny4K.mjs";
+import { t as OptionsRepository } from "../../../../options-D1FBiAv1.mjs";
+import "../../../../resolve-Cy0aWSRj.mjs";
+import "../../../../redirect-DId44BS1.mjs";
+import "../../../../request-cache-DAZZmesc.mjs";
+import "../../../../byline-registry-BxDGIO0I.mjs";
+import "../../../../field-defs-cache-Cf5FHK0M.mjs";
+import "../../../../byline-Vdi85CsZ.mjs";
+import "../../../../dist-BAsh8dbf.mjs";
+import "../../../../fts-manager-iddym8cd.mjs";
+import "../../../../loader-WJi6GFRn.mjs";
+import "../../../../collection-slugs-cache-7lTmNzeA.mjs";
+import "../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../activation-DyNTe_Tl.mjs";
+import "../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../registry-DTqaqxed.mjs";
+import "../../../../settings-DcMjREe5.mjs";
+import "../../../../ssrf-gl4gFNhw.mjs";
+import { n as apiSuccess, r as handleError, t as apiError } from "../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../parse-WRg5C3NX.mjs";
+import "../../../../media-C1EIZKh1.mjs";
+import "../../../../entry-lock-DIYHAaSw.mjs";
+import { x as setupBody } from "../../../../relations-rOmbndUJ.mjs";
+import "../../../../status-Cenfk_r5.mjs";
+import "../../../../api/schemas/index.mjs";
+import "../../../../ssrf-TQhaljuI.mjs";
+import { t as validateSeed } from "../../../../validate-D8VPn4Hv.mjs";
+import { t as applySeed } from "../../../../apply-DLmM3R7f.mjs";
+import { t as loadSeed } from "../../../../load-DPtY9cZo.mjs";
+import { r as getPublicOrigin } from "../../../../public-url-FWWAvnre.mjs";
+import { t as getAuthMode } from "../../../../mode-Dm4BHhRH.mjs";
+
+//#region src/astro/routes/api/setup/index.ts
+const prerender = false;
+const POST = async ({ request, url, locals }) => {
+	const { emdash } = locals;
+	if (!emdash?.db) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	try {
+		try {
+			const setupComplete = await new OptionsRepository(emdash.db).get("emdash:setup_complete");
+			if (setupComplete === true || setupComplete === "true") return apiError("ALREADY_CONFIGURED", "Setup has already been completed", 409);
+		} catch {}
+		const body = await parseBody(request, setupBody);
+		if (isParseError(body)) return body;
+		const seed = await loadSeed();
+		seed.settings = {
+			...seed.settings,
+			title: body.title,
+			tagline: body.tagline
+		};
+		const validation = validateSeed(seed);
+		if (!validation.valid) return apiError("INVALID_SEED", `Invalid seed file: ${validation.errors.join(", ")}`, 400);
+		let result;
+		try {
+			result = await applySeed(emdash.db, seed, {
+				includeContent: body.includeContent,
+				onConflict: "skip",
+				storage: emdash.storage ?? void 0
+			});
+		} catch (error) {
+			return handleError(error, "Failed to apply seed", "SEED_ERROR");
+		}
+		const useExternalAuth = getAuthMode(emdash.config).type === "external";
+		try {
+			const options = new OptionsRepository(emdash.db);
+			const siteUrl = getPublicOrigin(url, emdash.config);
+			await options.setIfAbsent("emdash:site_url", siteUrl);
+			if (useExternalAuth) {
+				await options.set("emdash:setup_complete", true);
+				await options.set("emdash:site_title", body.title);
+				if (body.tagline) await options.set("emdash:site_tagline", body.tagline);
+			} else await options.set("emdash:setup_state", {
+				step: "site_complete",
+				title: body.title,
+				tagline: body.tagline
+			});
+		} catch (error) {
+			console.error("Failed to save setup state:", error);
+		}
+		return apiSuccess({
+			success: true,
+			setupComplete: useExternalAuth,
+			result
+		});
+	} catch (error) {
+		return handleError(error, "Setup failed", "SETUP_ERROR");
+	}
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=index.mjs.map

@@ -1,0 +1,27 @@
+import "../../../../../after-CBU2vkoO.mjs";
+import "../../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../comment-vxOzWbZN.mjs";
+import { a as unwrapResult, i as requireDb, r as handleError } from "../../../../../error-BDcFyoRt.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+import { r as handleCommentCounts } from "../../../../../comments-VzmVLyaC.mjs";
+
+//#region src/astro/routes/api/admin/comments/counts.ts
+const prerender = false;
+const GET = async ({ locals }) => {
+	const { emdash, user } = locals;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "comments:moderate");
+	if (denied) return denied;
+	try {
+		return unwrapResult(await handleCommentCounts(emdash.db));
+	} catch (error) {
+		return handleError(error, "Failed to get comment counts", "COMMENT_COUNTS_ERROR");
+	}
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=counts.mjs.map

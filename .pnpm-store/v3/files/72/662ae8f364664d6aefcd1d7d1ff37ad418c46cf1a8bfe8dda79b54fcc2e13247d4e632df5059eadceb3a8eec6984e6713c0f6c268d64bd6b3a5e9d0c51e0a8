@@ -1,0 +1,47 @@
+import "../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../config-C3EBstHi.mjs";
+import "../../../../after-CBU2vkoO.mjs";
+import "../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../slugify-B994zkXC.mjs";
+import "../../../../base64-CvLhUKQv.mjs";
+import "../../../../types-CQPWhPxE.mjs";
+import "../../../../media-BBm8Wg3f.mjs";
+import "../../../../options-D1FBiAv1.mjs";
+import "../../../../request-cache-DAZZmesc.mjs";
+import "../../../../loader-WJi6GFRn.mjs";
+import "../../../../settings-DcMjREe5.mjs";
+import { t as SsrfError } from "../../../../ssrf-gl4gFNhw.mjs";
+import { n as apiSuccess, r as handleError, t as apiError } from "../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../parse-WRg5C3NX.mjs";
+import "../../../../media-C1EIZKh1.mjs";
+import "../../../../entry-lock-DIYHAaSw.mjs";
+import { S as importProbeBody } from "../../../../relations-rOmbndUJ.mjs";
+import "../../../../status-Cenfk_r5.mjs";
+import "../../../../api/schemas/index.mjs";
+import { h as probeUrl } from "../../../../import-D96g2otw.mjs";
+import "../../../../ssrf-TQhaljuI.mjs";
+import "../../../../utils-BicP5Qbg.mjs";
+import { r as requirePerm } from "../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/import/probe.ts
+const prerender = false;
+const POST = async ({ request, locals }) => {
+	const { user } = locals;
+	const denied = requirePerm(user, "import:execute");
+	if (denied) return denied;
+	try {
+		const body = await parseBody(request, importProbeBody);
+		if (isParseError(body)) return body;
+		return apiSuccess({
+			success: true,
+			result: await probeUrl(body.url)
+		});
+	} catch (error) {
+		if (error instanceof SsrfError) return apiError("SSRF_BLOCKED", error.message, 400);
+		return handleError(error, "Failed to probe URL", "PROBE_ERROR");
+	}
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=probe.mjs.map

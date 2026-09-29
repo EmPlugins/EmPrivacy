@@ -1,0 +1,260 @@
+import { PackageProfile, PackageProfileExtension, PackageRelease, PackageReleaseExtension } from "@emdash-cms/registry-lexicons";
+import { CanonicalDeclaredAccess, DeclaredAccess, PluginManifest } from "@emdash-cms/plugin-types";
+
+//#region src/errors.d.ts
+/** Stable, machine-readable failures returned by this package. */
+declare const VERIFICATION_ERROR_CODES: readonly ["AUTH_METHOD_UNSUPPORTED", "BLOB_METADATA_MISMATCH", "BLOB_REF_INVALID", "BUNDLE_COMPRESSED_SIZE_EXCEEDED", "BUNDLE_DECOMPRESSED_SIZE_EXCEEDED", "BUNDLE_FILE_COUNT_EXCEEDED", "BUNDLE_FILE_SIZE_EXCEEDED", "BUNDLE_ID_MISMATCH", "BUNDLE_INVALID_ARCHIVE", "BUNDLE_INVALID_MANIFEST", "BUNDLE_INVALID_PATH", "BUNDLE_MISSING_BACKEND", "BUNDLE_MISSING_MANIFEST", "BUNDLE_PATH_COLLISION", "BUNDLE_UNSUPPORTED_ENTRY", "BUNDLE_VERSION_MISMATCH", "CHECKSUM_MISMATCH", "FETCH_FAILED", "HOST_REJECTED", "INVALID_MULTIHASH", "INVALID_URL", "PDS_RESOLUTION_FAILED", "PROFILE_EXTENSION_INVALID", "PROFILE_EXTENSION_MISSING", "PROFILE_ID_MISMATCH", "PROFILE_LEXICON_INVALID", "PROFILE_POLICY_INVALID", "PROFILE_REPOSITORY_INVALID", "PROVENANCE_REQUIRED", "PROVENANCE_UNVERIFIABLE", "REDIRECT_LIMIT_EXCEEDED", "REDIRECT_LOCATION_MISSING", "RESOURCE_SIZE_EXCEEDED", "RESOURCE_STATUS_ERROR", "RESOURCE_TIMEOUT", "RELEASE_EXTENSION_INVALID", "RELEASE_EXTENSION_MISSING", "RELEASE_ARTIFACT_SOURCE_MISSING", "RELEASE_LEXICON_INVALID", "RELEASE_PACKAGE_MISMATCH", "RELEASE_RKEY_MISMATCH", "RELEASE_VERSION_INVALID", "RELEASE_VERSION_MISMATCH", "UNSUPPORTED_MULTIHASH"];
+type VerificationErrorCode = (typeof VERIFICATION_ERROR_CODES)[number];
+interface VerificationError {
+  code: VerificationErrorCode;
+  message: string;
+  details?: {
+    hint?: string;
+    hintUrl?: string;
+  };
+}
+type VerificationResult<T> = {
+  success: true;
+  value: T;
+} | {
+  success: false;
+  error: VerificationError;
+};
+//#endregion
+//#region src/checksum.d.ts
+type MultihashAlgorithm = "sha2-256";
+interface DecodedMultihash {
+  algorithm: MultihashAlgorithm;
+  digest: Uint8Array;
+}
+/** Derive the required artifact checksum from a raw sha2-256 blob CID. */
+declare function multihashFromBlobCid(value: string): VerificationResult<string>;
+/** Decodes a lowercase base32 multibase-encoded multihash. */
+declare function decodeMultihash(value: string): VerificationResult<DecodedMultihash>;
+declare function computeMultihash(bytes: Uint8Array, algorithm?: MultihashAlgorithm): Promise<VerificationResult<string>>;
+declare function computeArtifactDigestCandidates(bytes: Uint8Array): Promise<readonly [Uint8Array, Uint8Array, Uint8Array]>;
+declare function verifyMultihash(bytes: Uint8Array, expected: string): Promise<VerificationResult<true>>;
+/**
+ * Compare public checksum digest bytes without early exit. Digests are public
+ * integrity metadata, so a portable byte loop is preferable to a Node-only
+ * timing primitive while still avoiding an ordinary equality short circuit.
+ */
+declare function compareDigestBytes(left: Uint8Array, right: Uint8Array): boolean;
+//#endregion
+//#region src/fetch.d.ts
+declare const DEFAULT_FETCH_LIMITS: {
+  readonly headerTimeoutMs: 10000;
+  readonly totalTimeoutMs: 30000;
+  readonly maxBytes: number;
+  readonly maxRedirects: 3;
+};
+type FetchImplementation = (input: URL, init: RequestInit) => Promise<Response>;
+/**
+ * Resolves every hostname before it is fetched. Returned addresses are checked
+ * for local and private ranges. Workers cannot pin fetch() to these addresses,
+ * so callers with private-network access must use an egress proxy that does.
+ */
+type HostnameResolver = (hostname: string) => Promise<readonly string[]>;
+interface FetchVerifiedResourceOptions {
+  fetch: FetchImplementation;
+  resolveHostname: HostnameResolver;
+  allowHttpLocalhost?: boolean;
+  /** Non-success statuses that the caller needs to inspect as bounded responses. */
+  allowedStatuses?: readonly number[];
+  headerTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  maxBytes?: number;
+  maxRedirects?: number;
+}
+interface VerifiedResource {
+  bytes: Uint8Array;
+  url: URL;
+  status: number;
+  headers: Headers;
+}
+declare function fetchVerifiedResource(value: string | URL, options: FetchVerifiedResourceOptions): Promise<VerificationResult<VerifiedResource>>;
+//#endregion
+//#region src/artifact.d.ts
+interface ReleaseArtifactReference {
+  blob?: {
+    $type?: "blob";
+    ref: {
+      $link: string;
+    };
+    mimeType: string;
+    size: number;
+  } | {
+    cid: string;
+    mimeType: string;
+  };
+  url?: string;
+  checksum: string;
+  requiresAuth?: boolean;
+}
+interface FetchReleaseArtifactInput {
+  artifact: ReleaseArtifactReference;
+  record: {
+    did: string;
+    collection: string;
+    rkey: string;
+    cid: string;
+  };
+  artifactCaches?: readonly unknown[];
+  pdsEndpoint?: string;
+  auth?: unknown;
+}
+interface FetchedReleaseArtifact {
+  bytes: Uint8Array;
+  source: "artifact-cache" | "blob" | "url";
+  url: URL;
+}
+type RecordScopedImagePreset = "avatar" | "banner" | "feed_thumbnail" | "feed_fullsize";
+declare function fetchReleaseArtifact(input: FetchReleaseArtifactInput, options: FetchVerifiedResourceOptions): Promise<VerificationResult<FetchedReleaseArtifact>>;
+declare function recordScopedBlobCacheUrl(serviceEndpoint: string, record: FetchReleaseArtifactInput["record"], blobCid: string): VerificationResult<URL>;
+declare function recordScopedImageCacheUrl(serviceEndpoint: string, preset: RecordScopedImagePreset, record: FetchReleaseArtifactInput["record"], blobCid: string): VerificationResult<URL>;
+declare function resolvePublisherPdsEndpoint(publisherDid: string, options: FetchVerifiedResourceOptions): Promise<VerificationResult<string>>;
+//#endregion
+//#region src/bundle-limits.d.ts
+/** Maximum accepted gzip payload size. */
+declare const MAX_BUNDLE_COMPRESSED_BYTES: number;
+/** Maximum aggregate size of regular-file contents. */
+declare const MAX_BUNDLE_SIZE: number;
+/** Maximum size of one regular file. */
+declare const MAX_BUNDLE_FILE_BYTES: number;
+/** Maximum number of regular files. */
+declare const MAX_BUNDLE_FILE_COUNT = 20;
+/** Maximum total tar entries, including harmless directory entries. */
+declare const MAX_BUNDLE_TAR_ENTRY_COUNT = 32;
+/**
+ * Maximum tar stream size after decompression. This includes USTAR headers,
+ * file padding, and the end marker in addition to the regular-file contents.
+ */
+declare const MAX_BUNDLE_DECOMPRESSED_BYTES: number;
+//#endregion
+//#region src/bundle.d.ts
+interface ValidatePluginBundleOptions {
+  expectedSlug?: string;
+  expectedVersion?: string;
+}
+interface ValidatedPluginBundle {
+  manifest: PluginManifest;
+  declaredAccess: DeclaredAccess;
+  backend: Uint8Array;
+  admin?: Uint8Array;
+}
+declare function validatePluginBundle(compressed: Uint8Array, options?: ValidatePluginBundleOptions): Promise<VerificationResult<ValidatedPluginBundle>>;
+//#endregion
+//#region src/provenance.d.ts
+declare const PREDICATE_TYPE = "https://slsa.dev/provenance/v1";
+type ReleaseProvenance = PackageReleaseExtension.Provenance;
+interface ProvenanceVerificationInput {
+  document: Uint8Array;
+  reference: ReleaseProvenance;
+  artifactDigest: Uint8Array;
+  artifactDigests?: readonly Uint8Array[];
+  profileRepository: string;
+}
+interface VerifiedProvenance {
+  predicateType: typeof PREDICATE_TYPE;
+  artifactDigest: Uint8Array;
+  sourceRepository: string;
+  builderId: string;
+}
+interface VerifiedGitHubProvenance extends VerifiedProvenance {
+  repositoryId: string;
+  workflowRef: string;
+  commitSha: string;
+  invocationId: string;
+}
+interface ProvenanceVerifier {
+  verify(input: ProvenanceVerificationInput): Promise<VerificationResult<VerifiedProvenance>>;
+}
+declare class GitHubProvenanceVerifier implements ProvenanceVerifier {
+  verify(input: ProvenanceVerificationInput): Promise<VerificationResult<VerifiedGitHubProvenance>>;
+}
+//#endregion
+//#region src/repository.d.ts
+/** Canonicalize a signed source repository URL, or return null when it is unsafe. */
+declare function canonicalizeRepositoryUrl(value: string): string | null;
+//#endregion
+//#region src/records.d.ts
+interface NormalizedReleasePolicy {
+  requireProvenance: boolean;
+  confirmation: "escalation-only" | "always";
+  approvers: string[];
+}
+interface ProvenanceEvidence {
+  document: Uint8Array;
+  artifactDigest: Uint8Array;
+  artifactDigests?: readonly Uint8Array[];
+  verifier?: ProvenanceVerifier;
+}
+interface RecordVerificationInput {
+  publisherDid: string;
+  package: string;
+  version: string;
+  rkey: string;
+  profile: unknown;
+  release: unknown;
+  provenance?: ProvenanceEvidence;
+}
+type RecordInspectionInput = Omit<RecordVerificationInput, "provenance">;
+type RecordVerificationCode = VerificationErrorCode | "PROVENANCE_ABSENT_OPTIONAL" | "VERIFIED";
+type ProvenanceStatus = "not-checked" | "absent-optional" | "absent-required" | "verified" | "failed";
+interface RecordVerificationDetails {
+  hint?: string;
+  hintUrl?: string;
+}
+interface RecordVerificationReason {
+  code: RecordVerificationCode;
+  message: string;
+}
+interface VerifiedRecordContext {
+  profile: PackageProfile.Main;
+  release: PackageRelease.Main;
+  profileExtension: PackageProfileExtension.Main;
+  releaseExtension: PackageReleaseExtension.Main;
+  repository: string;
+  policy: NormalizedReleasePolicy;
+  declaredAccess: CanonicalDeclaredAccess;
+  verifiedProvenance?: VerifiedProvenance;
+}
+type RecordVerificationFailure = {
+  success: false;
+  status: "failed";
+  code: VerificationErrorCode;
+  reasons: RecordVerificationReason[];
+  provenance: {
+    status: ProvenanceStatus;
+  };
+  details?: RecordVerificationDetails;
+};
+type RecordVerificationReport = {
+  success: true;
+  status: "verified" | "unattested";
+  code: "VERIFIED" | "PROVENANCE_ABSENT_OPTIONAL";
+  reasons: RecordVerificationReason[];
+  provenance: {
+    status: "verified" | "absent-optional";
+  };
+  value: VerifiedRecordContext;
+} | RecordVerificationFailure;
+type RecordInspectionReport = {
+  success: true;
+  status: "inspected";
+  code: "VERIFIED";
+  reasons: RecordVerificationReason[];
+  provenance: {
+    status: "not-checked";
+  };
+  value: VerifiedRecordContext;
+} | RecordVerificationFailure;
+/** Validate signed profile/release records without evaluating provenance evidence. */
+declare function inspectPackageReleaseRecords(input: RecordInspectionInput): Promise<RecordInspectionReport>;
+//#endregion
+//#region src/records-default.d.ts
+/** Validate signed profile/release records and apply the complete provenance policy. */
+declare function verifyPackageReleaseRecords(input: RecordVerificationInput): Promise<RecordVerificationReport>;
+//#endregion
+export { DEFAULT_FETCH_LIMITS, type DecodedMultihash, type FetchImplementation, type FetchReleaseArtifactInput, type FetchVerifiedResourceOptions, type FetchedReleaseArtifact, GitHubProvenanceVerifier, type HostnameResolver, MAX_BUNDLE_COMPRESSED_BYTES, MAX_BUNDLE_DECOMPRESSED_BYTES, MAX_BUNDLE_FILE_BYTES, MAX_BUNDLE_FILE_COUNT, MAX_BUNDLE_SIZE, MAX_BUNDLE_TAR_ENTRY_COUNT, type MultihashAlgorithm, type NormalizedReleasePolicy, type ProvenanceEvidence, type ProvenanceStatus, type ProvenanceVerificationInput, type ProvenanceVerifier, type RecordInspectionInput, type RecordInspectionReport, type RecordScopedImagePreset, type RecordVerificationCode, type RecordVerificationDetails, type RecordVerificationFailure, type RecordVerificationInput, type RecordVerificationReason, type RecordVerificationReport, type ReleaseArtifactReference, type ReleaseProvenance, VERIFICATION_ERROR_CODES, type ValidatePluginBundleOptions, type ValidatedPluginBundle, type VerificationError, type VerificationErrorCode, type VerificationResult, type VerifiedGitHubProvenance, type VerifiedProvenance, type VerifiedRecordContext, type VerifiedResource, canonicalizeRepositoryUrl, compareDigestBytes, computeArtifactDigestCandidates, computeMultihash, decodeMultihash, fetchReleaseArtifact, fetchVerifiedResource, inspectPackageReleaseRecords, multihashFromBlobCid, recordScopedBlobCacheUrl, recordScopedImageCacheUrl, resolvePublisherPdsEndpoint, validatePluginBundle, verifyMultihash, verifyPackageReleaseRecords };
+//# sourceMappingURL=index.d.ts.map

@@ -1,0 +1,126 @@
+import "../../../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../../../config-C3EBstHi.mjs";
+import "../../../../../../after-CBU2vkoO.mjs";
+import "../../../../../../object-cache-DVKnyOfy.mjs";
+import "../../../../../../content-CNfMWuhY.mjs";
+import "../../../../../../slugify-B994zkXC.mjs";
+import "../../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../../types-CQPWhPxE.mjs";
+import "../../../../../../media-BBm8Wg3f.mjs";
+import "../../../../../../user-DIsIXogT.mjs";
+import "../../../../../../taxonomy-DP1vny4K.mjs";
+import "../../../../../../comment-vxOzWbZN.mjs";
+import "../../../../../../options-D1FBiAv1.mjs";
+import "../../../../../../menus-UdwjHZJC.mjs";
+import "../../../../../../resolve-Cy0aWSRj.mjs";
+import "../../../../../../redirect-DId44BS1.mjs";
+import "../../../../../../request-cache-DAZZmesc.mjs";
+import "../../../../../../byline-registry-BxDGIO0I.mjs";
+import "../../../../../../field-defs-cache-Cf5FHK0M.mjs";
+import "../../../../../../byline-Vdi85CsZ.mjs";
+import "../../../../../../entry-locks-BEcX7ET0.mjs";
+import "../../../../../../seo-Bw68KxRc.mjs";
+import "../../../../../../cache--7HKu5Xm.mjs";
+import "../../../../../../fts-manager-iddym8cd.mjs";
+import "../../../../../../loader-WJi6GFRn.mjs";
+import "../../../../../../collection-slugs-cache-7lTmNzeA.mjs";
+import "../../../../../../taxonomies-NcFDq5Gg.mjs";
+import { t as handleRegistryInstall } from "../../../../../../api-BvxJmnFY.mjs";
+import "../../../../../../dashboard-BNSvAN8A.mjs";
+import "../../../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../../../activation-DyNTe_Tl.mjs";
+import "../../../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../../../registry-DTqaqxed.mjs";
+import "../../../../../../hash-BRweX6jz.mjs";
+import "../../../../../../media-folders-DASfX_DH.mjs";
+import "../../../../../../media-usage-work-C5B1zT1c.mjs";
+import "../../../../../../content-repair-CIMt5C0U.mjs";
+import "../../../../../../media-usage-C1EswMTq.mjs";
+import "../../../../../../media-usage-activation-CrHNltlL.mjs";
+import "../../../../../../media-usage-work-IkQx_Yz6.mjs";
+import "../../../../../../query-gtXT03Wc.mjs";
+import "../../../../../../zod-generator-CNRGdnBY.mjs";
+import "../../../../../../schema-CRu38Pr5.mjs";
+import "../../../../../../schema-DifxndJx.mjs";
+import "../../../../../../seo-C4AmbsMU.mjs";
+import "../../../../../../sections-3X52kmIR.mjs";
+import "../../../../../../settings-DcMjREe5.mjs";
+import "../../../../../../settings-AnEFYICn.mjs";
+import "../../../../../../taxonomies-BOdxuZpV.mjs";
+import "../../../../../../manifest-schema-CILooI5J.mjs";
+import "../../../../../../types-A2cN6a4a.mjs";
+import "../../../../../../artifact-fetch-P2JXVwOq.mjs";
+import "../../../../../../ssrf-gl4gFNhw.mjs";
+import "../../../../../../config--eWjQJE5.mjs";
+import { a as unwrapResult, r as handleError, t as apiError } from "../../../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../../media-C1EIZKh1.mjs";
+import "../../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../../status-Cenfk_r5.mjs";
+import { r as checkMediaUsageActivationWriteFence } from "../../../../../../media-usage-write-fence-B9anjOSg.mjs";
+import { n as VERSION } from "../../../../../../version-CK67_SXX.mjs";
+import { r as requirePerm } from "../../../../../../authorize-C2QHlWSS.mjs";
+import { z } from "zod";
+import { hostEnvFromVersions } from "@emdash-cms/registry-client/env";
+
+//#region src/astro/routes/api/admin/plugins/registry/install.ts
+/**
+* Registry plugin install endpoint
+*
+* POST /_emdash/api/admin/plugins/registry/install
+*
+* Installs a plugin from the experimental decentralized plugin registry
+* (see RFC 0001). The browser resolves `(handle, slug) → (did, slug)`
+* via the aggregator before posting and sends the publisher DID
+* directly; the server skips the resolvePackage round-trip and looks
+* up the package by DID. Sending DID rather than handle means installs
+* work for publishers whose handle the aggregator couldn't resolve at
+* view time (handle is best-effort per the lexicon).
+*/
+const prerender = false;
+const installBodySchema = z.object({
+	did: z.string().min(1).max(2048).regex(/^did:[a-z]+:/, "Invalid DID"),
+	slug: z.string().min(1).max(64).regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, "Invalid slug"),
+	version: z.string().min(1).max(64).optional(),
+	acknowledgedDeclaredAccess: z.unknown().optional(),
+	acknowledgedMcpTools: z.unknown().optional(),
+	acknowledgedProfileCid: z.string().min(1).max(256).optional(),
+	acknowledgedReleaseCid: z.string().min(1).max(256).optional()
+});
+const POST = async ({ request, locals }) => {
+	try {
+		const { emdash, user } = locals;
+		if (!emdash?.db) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+		const denied = requirePerm(user, "plugins:manage");
+		if (denied) return denied;
+		const activationFence = await checkMediaUsageActivationWriteFence(emdash.db);
+		if (activationFence) return activationFence;
+		const body = await parseBody(request, installBodySchema);
+		if (isParseError(body)) return body;
+		const reservedPluginIds = new Set([...emdash.configuredPlugins.map((p) => p.id), ...(emdash.config.sandboxed ?? []).map((p) => p.id)]);
+		const result = await handleRegistryInstall(emdash.db, emdash.storage, emdash.getSandboxRunner(), emdash.config.experimental?.registry, {
+			did: body.did,
+			slug: body.slug,
+			version: body.version,
+			acknowledgedDeclaredAccess: body.acknowledgedDeclaredAccess,
+			acknowledgedMcpTools: body.acknowledgedMcpTools,
+			acknowledgedProfileCid: body.acknowledgedProfileCid,
+			acknowledgedReleaseCid: body.acknowledgedReleaseCid
+		}, {
+			configuredPluginIds: reservedPluginIds,
+			hostEnv: hostEnvFromVersions(VERSION, emdash.config.astroVersion)
+		});
+		if (!result.success) return unwrapResult(result);
+		await emdash.syncRegistryPlugins();
+		return unwrapResult(result, 201);
+	} catch (error) {
+		console.error("[registry-install] Unhandled error:", error);
+		return handleError(error, "Failed to install plugin from registry", "INSTALL_FAILED");
+	}
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=install.mjs.map

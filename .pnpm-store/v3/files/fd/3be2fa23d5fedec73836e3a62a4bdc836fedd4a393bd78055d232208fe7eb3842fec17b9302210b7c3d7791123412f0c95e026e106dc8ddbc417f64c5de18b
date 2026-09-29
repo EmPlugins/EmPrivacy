@@ -1,0 +1,18 @@
+//#region src/search/types.ts
+/**
+* Search Types
+*
+* Type definitions for the EmDash search system.
+*/
+/**
+* Search configuration for a collection
+*/
+const SEARCH_TOKENIZERS = [
+	"porter unicode61",
+	"unicode61",
+	"trigram"
+];
+
+//#endregion
+export { SEARCH_TOKENIZERS as t };
+//# sourceMappingURL=types-c9GP7Dj5.mjs.map

@@ -1,0 +1,7 @@
+import * as v from '@atcute/lexicons/validations';
+const _mainSchema = /*#__PURE__*/ v.procedure('com.atproto.identity.requestPlcOperationSignature', {
+    params: null,
+    input: null,
+    output: null,
+});
+export const mainSchema = _mainSchema;

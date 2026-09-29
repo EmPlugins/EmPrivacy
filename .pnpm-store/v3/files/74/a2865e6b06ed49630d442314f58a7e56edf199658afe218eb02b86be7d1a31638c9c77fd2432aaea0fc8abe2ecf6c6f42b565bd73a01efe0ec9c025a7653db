@@ -1,0 +1,162 @@
+import "../dialect-helpers-BcQvkHgn.mjs";
+import "../config-C3EBstHi.mjs";
+import "../after-CBU2vkoO.mjs";
+import "../object-cache-DVKnyOfy.mjs";
+import "../base64-CvLhUKQv.mjs";
+import "../types-CQPWhPxE.mjs";
+import { t as MediaRepository } from "../media-BBm8Wg3f.mjs";
+import "../options-D1FBiAv1.mjs";
+import "../request-cache-DAZZmesc.mjs";
+import "../loader-WJi6GFRn.mjs";
+import { s as invalidateSiteSettingsCache } from "../settings-DcMjREe5.mjs";
+
+//#region src/media/local-runtime.ts
+/**
+* Create the local media provider
+*/
+const createMediaProvider = (config) => {
+	const { db, storage } = config;
+	if (!db) throw new Error("Local media provider requires database connection");
+	const resolveDb = config.getDb ?? (() => db);
+	const repo = () => new MediaRepository(resolveDb());
+	return {
+		async list(options) {
+			const result = await repo().findMany({
+				cursor: options.cursor,
+				limit: options.limit,
+				mimeType: options.mimeType
+			});
+			return {
+				items: result.items.map((item) => ({
+					id: item.id,
+					filename: item.filename,
+					mimeType: item.mimeType,
+					size: item.size ?? void 0,
+					width: item.width ?? void 0,
+					height: item.height ?? void 0,
+					focalX: item.focalX ?? void 0,
+					focalY: item.focalY ?? void 0,
+					blurhash: item.blurhash ?? void 0,
+					dominantColor: item.dominantColor ?? void 0,
+					alt: item.alt ?? void 0,
+					previewUrl: `/_emdash/api/media/file/${item.storageKey}`,
+					meta: {
+						storageKey: item.storageKey,
+						caption: item.caption,
+						blurhash: item.blurhash,
+						dominantColor: item.dominantColor
+					}
+				})),
+				nextCursor: result.nextCursor
+			};
+		},
+		async get(id) {
+			const item = await repo().findById(id);
+			if (!item) return null;
+			return {
+				id: item.id,
+				filename: item.filename,
+				mimeType: item.mimeType,
+				size: item.size ?? void 0,
+				width: item.width ?? void 0,
+				height: item.height ?? void 0,
+				focalX: item.focalX ?? void 0,
+				focalY: item.focalY ?? void 0,
+				blurhash: item.blurhash ?? void 0,
+				dominantColor: item.dominantColor ?? void 0,
+				alt: item.alt ?? void 0,
+				previewUrl: `/_emdash/api/media/file/${item.storageKey}`,
+				meta: {
+					storageKey: item.storageKey,
+					caption: item.caption,
+					blurhash: item.blurhash,
+					dominantColor: item.dominantColor
+				}
+			};
+		},
+		async upload(_input) {
+			if (!storage) throw new Error("Storage not configured for local media provider");
+			throw new Error("Local upload should use /_emdash/api/media endpoint");
+		},
+		async delete(id) {
+			const repoInstance = repo();
+			const item = await repoInstance.findById(id);
+			if (!item) return;
+			if (storage) try {
+				await storage.delete(item.storageKey);
+			} catch {}
+			await repoInstance.delete(id);
+			invalidateSiteSettingsCache();
+		},
+		getEmbed(value, _options) {
+			const src = `/_emdash/api/media/file/${typeof value.meta?.storageKey === "string" ? value.meta.storageKey : value.id}`;
+			const mimeType = value.mimeType || "";
+			const blurhash = value.blurhash ?? (typeof value.meta?.blurhash === "string" ? value.meta.blurhash : void 0);
+			const dominantColor = value.dominantColor ?? (typeof value.meta?.dominantColor === "string" ? value.meta.dominantColor : void 0);
+			if (mimeType.startsWith("image/")) return {
+				type: "image",
+				src,
+				width: value.width,
+				height: value.height,
+				blurhash,
+				dominantColor,
+				alt: value.alt
+			};
+			if (mimeType.startsWith("video/")) return {
+				type: "video",
+				src,
+				width: value.width,
+				height: value.height,
+				controls: true,
+				preload: "metadata"
+			};
+			if (mimeType.startsWith("audio/")) return {
+				type: "audio",
+				src,
+				controls: true,
+				preload: "metadata"
+			};
+			return {
+				type: "image",
+				src,
+				width: value.width,
+				height: value.height,
+				blurhash,
+				dominantColor,
+				alt: value.alt
+			};
+		},
+		getThumbnailUrl(id, _mimeType) {
+			return `/_emdash/api/media/file/${id}`;
+		}
+	};
+};
+/**
+* Helper to convert a MediaRepository item to MediaProviderItem
+*/
+function repoItemToProviderItem(item) {
+	return {
+		id: item.id,
+		filename: item.filename,
+		mimeType: item.mimeType,
+		size: item.size ?? void 0,
+		width: item.width ?? void 0,
+		height: item.height ?? void 0,
+		focalX: item.focalX ?? void 0,
+		focalY: item.focalY ?? void 0,
+		blurhash: item.blurhash ?? void 0,
+		dominantColor: item.dominantColor ?? void 0,
+		alt: item.alt ?? void 0,
+		previewUrl: `/_emdash/api/media/file/${item.storageKey}`,
+		meta: {
+			storageKey: item.storageKey,
+			caption: item.caption,
+			blurhash: item.blurhash,
+			dominantColor: item.dominantColor
+		}
+	};
+}
+
+//#endregion
+export { createMediaProvider, repoItemToProviderItem };
+//# sourceMappingURL=local-runtime.mjs.map

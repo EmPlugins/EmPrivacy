@@ -1,0 +1,56 @@
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import { t as OptionsRepository } from "../../../../../options-D1FBiAv1.mjs";
+import { n as apiSuccess, r as handleError, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../media-C1EIZKh1.mjs";
+import "../../../../../entry-lock-DIYHAaSw.mjs";
+import { A as inviteCreateBody } from "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { t as getSiteBaseUrl } from "../../../../../site-url-Bqf-ea3N.mjs";
+import { InviteError, Role, createInvite } from "@emdash-cms/auth";
+import { createKyselyAdapter } from "@emdash-cms/auth/adapters/kysely";
+
+//#region src/astro/routes/api/auth/invite/index.ts
+const prerender = false;
+const POST = async ({ request, locals }) => {
+	const { emdash, user } = locals;
+	if (!emdash?.db) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	if (!user || user.role < Role.ADMIN) return apiError("FORBIDDEN", "Admin privileges required", 403);
+	const adapter = createKyselyAdapter(emdash.db);
+	try {
+		const body = await parseBody(request, inviteCreateBody);
+		if (isParseError(body)) return body;
+		const role = body.role ?? Role.AUTHOR;
+		const siteName = await new OptionsRepository(emdash.db).get("emdash:site_title") || "EmDash";
+		const baseUrl = await getSiteBaseUrl(emdash.db, request, emdash.config);
+		const emailSend = emdash.email?.isAvailable() ? (message) => emdash.email.send(message, "system") : void 0;
+		const result = await createInvite({
+			baseUrl,
+			siteName,
+			email: emailSend
+		}, adapter, body.email, role, user.id);
+		if (emailSend) return apiSuccess({
+			success: true,
+			message: `Invite sent to ${body.email}`
+		});
+		return apiSuccess({
+			success: true,
+			message: "Invite created. No email provider configured — share the link manually.",
+			inviteUrl: result.url
+		}, 200);
+	} catch (error) {
+		if (error instanceof InviteError) return apiError(error.code.toUpperCase(), error.message, {
+			user_exists: 409,
+			invalid_token: 400,
+			token_expired: 400
+		}[error.code] ?? 400);
+		return handleError(error, "Failed to create invite", "INVITE_CREATE_ERROR");
+	}
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=index.mjs.map

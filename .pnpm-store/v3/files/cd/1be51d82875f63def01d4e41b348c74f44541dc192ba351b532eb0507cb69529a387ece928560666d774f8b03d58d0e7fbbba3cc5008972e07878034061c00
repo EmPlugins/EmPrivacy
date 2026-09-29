@@ -1,0 +1,27 @@
+import { t as apiError } from "./error-BDcFyoRt.mjs";
+import { i as hasScope } from "./api-tokens-B_lfpmH3.mjs";
+
+//#region src/auth/scopes.ts
+/**
+* Scope enforcement for API token authentication.
+*
+* Routes call `requireScope(locals, "content:write")` alongside role checks.
+* Session-authenticated requests have no scope restrictions (implicit full access).
+* Token-authenticated requests must have the required scope (or "admin").
+*/
+/**
+* Check if the request has a required scope.
+* Returns a 403 Response if the scope is missing, or null if OK.
+*
+* For session-authenticated users (no tokenScopes), always returns null
+* since session auth has implicit full scope.
+*/
+function requireScope(locals, scope) {
+	if (!locals.tokenScopes) return null;
+	if (hasScope(locals.tokenScopes, scope)) return null;
+	return apiError("INSUFFICIENT_SCOPE", `Token lacks required scope: ${scope}`, 403);
+}
+
+//#endregion
+export { requireScope as t };
+//# sourceMappingURL=scopes-D5A1OZbq.mjs.map

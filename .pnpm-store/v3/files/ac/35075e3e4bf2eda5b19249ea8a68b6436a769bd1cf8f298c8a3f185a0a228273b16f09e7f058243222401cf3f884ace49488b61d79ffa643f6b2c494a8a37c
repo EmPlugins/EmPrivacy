@@ -1,0 +1,70 @@
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import { n as mapErrorStatus } from "../../../../../errors-DvMdNrgf.mjs";
+import { a as unwrapResult, t as apiError } from "../../../../../error-BDcFyoRt.mjs";
+import { i as parseQuery, n as parseBody, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../media-C1EIZKh1.mjs";
+import { en as contentCreateBody, rn as contentListQuery } from "../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { n as requireOwnerPerm, r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+import { hasPermission } from "@emdash-cms/auth";
+
+//#region src/astro/routes/api/content/[collection]/index.ts
+/**
+* Content list and create endpoints - injected by EmDash integration
+*
+* GET  /_emdash/api/content/{collection} - List content
+* POST /_emdash/api/content/{collection} - Create content
+*/
+const prerender = false;
+const GET = async ({ params, url, locals }) => {
+	const { emdash, user } = locals;
+	if (!emdash?.handleContentList) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	const denied = requirePerm(user, "content:read");
+	if (denied) return denied;
+	const collection = params.collection;
+	const query = parseQuery(url, contentListQuery);
+	if (isParseError(query)) return query;
+	const params_ = hasPermission(user, "content:read_drafts") ? query : {
+		...query,
+		status: "published"
+	};
+	return unwrapResult(await emdash.handleContentList(collection, params_));
+};
+const POST = async ({ params, request, locals, cache }) => {
+	const { emdash, user } = locals;
+	if (!emdash?.handleContentCreate || !emdash?.handleContentGet) return apiError("NOT_CONFIGURED", "EmDash is not initialized", 500);
+	const denied = requirePerm(user, "content:create");
+	if (denied) return denied;
+	const collection = params.collection;
+	const body = await parseBody(request, contentCreateBody);
+	if (isParseError(body)) return body;
+	if (body.translationOf) {
+		const source = await emdash.handleContentGet(collection, body.translationOf);
+		if (!source.success) return apiError(source.error?.code ?? "NOT_FOUND", source.error?.message ?? "Translation source not found", mapErrorStatus(source.error?.code));
+		const translationDenied = requireOwnerPerm(user, source.data.item.authorId ?? "", "content:edit_own", "content:edit_any");
+		if (translationDenied) return translationDenied;
+	}
+	if ((body.publishedAt !== void 0 || body.createdAt !== void 0) && !hasPermission(user, "content:publish_any")) return apiError("FORBIDDEN", "Writing publishedAt or createdAt requires content:publish_any permission", 403);
+	const actor = user ? {
+		id: user.id,
+		role: user.role
+	} : void 0;
+	const result = await emdash.handleContentCreate(collection, {
+		...body,
+		authorId: user?.id,
+		locale: body.locale,
+		translationOf: body.translationOf,
+		actor
+	});
+	if (!result.success) return unwrapResult(result);
+	if (cache?.enabled) await cache.invalidate({ tags: [collection] });
+	return unwrapResult(result, 201);
+};
+
+//#endregion
+export { GET, POST, prerender };
+//# sourceMappingURL=index.mjs.map

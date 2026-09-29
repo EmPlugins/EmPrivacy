@@ -1,0 +1,14 @@
+import * as v from '@atcute/lexicons/validations';
+const _mainSchema = /*#__PURE__*/ v.procedure('com.atproto.repo.uploadBlob', {
+    params: null,
+    input: {
+        type: 'blob',
+    },
+    output: {
+        type: 'lex',
+        schema: /*#__PURE__*/ v.object({
+            blob: /*#__PURE__*/ v.blob(),
+        }),
+    },
+});
+export const mainSchema = _mainSchema;

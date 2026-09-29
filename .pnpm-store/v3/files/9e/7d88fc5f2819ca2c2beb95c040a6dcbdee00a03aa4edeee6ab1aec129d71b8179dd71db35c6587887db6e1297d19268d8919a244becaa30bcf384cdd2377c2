@@ -1,0 +1,18 @@
+import "../../../base64-CvLhUKQv.mjs";
+import "../../../types-CQPWhPxE.mjs";
+import { n as apiSuccess, r as handleError } from "../../../error-BDcFyoRt.mjs";
+import { t as getWidgetComponents } from "../../../components-CL6Wkdk-.mjs";
+
+//#region src/astro/routes/api/widget-components.ts
+const prerender = false;
+const GET = async () => {
+	try {
+		return apiSuccess({ items: getWidgetComponents() });
+	} catch (error) {
+		return handleError(error, "Failed to fetch widget components", "WIDGET_COMPONENTS_ERROR");
+	}
+};
+
+//#endregion
+export { GET, prerender };
+//# sourceMappingURL=widget-components.mjs.map

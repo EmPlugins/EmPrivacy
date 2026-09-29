@@ -1,0 +1,189 @@
+import { n as fingerprintMigrationSet } from "./identity-CjGKDq8J.mjs";
+import { z } from "zod";
+
+//#region src/i18n/normalize.ts
+function normalizeAstroI18n(config) {
+	if (!config) return null;
+	return {
+		defaultLocale: config.defaultLocale,
+		locales: config.locales.map((locale) => typeof locale === "string" ? locale : locale.path),
+		fallback: config.fallback ? Object.fromEntries(Object.entries(config.fallback).filter((entry) => entry[1] !== void 0)) : void 0,
+		prefixDefaultLocale: typeof config.routing === "object" ? config.routing.prefixDefaultLocale ?? false : false
+	};
+}
+
+//#endregion
+//#region src/migrations/manifest.ts
+const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
+const MIGRATION_NAME_PATTERN = /^\d{3}_[a-z0-9_]+$/;
+const EXECUTOR_ENTRYPOINT_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/;
+const ENVIRONMENT_VARIABLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ENVIRONMENT_REFERENCE_KEY_PATTERN = /(?:env|envName|envVar)$/i;
+const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const SECRET_QUERY_KEY_PATTERN = /(?:auth|credential|key|password|secret|signature|token)/i;
+const SECRET_CONFIG_KEY_PATTERN = /(?:accessToken|apiKey|authToken|certificate|connectionString|password|privateKey|secret)/i;
+const SECRET_CONFIG_EXACT_KEY_PATTERN = /^(?:ca|cert|key)$/i;
+const CONNECTION_URL_PROTOCOLS = new Set([
+	"mysql:",
+	"postgres:",
+	"postgresql:"
+]);
+const i18nConfigSchema = z.object({
+	defaultLocale: z.string().min(1),
+	locales: z.array(z.string().min(1)).min(1),
+	fallback: z.record(z.string(), z.string()).optional(),
+	prefixDefaultLocale: z.boolean().optional()
+}).strict();
+const migrationManifestV1Schema = z.object({
+	schemaVersion: z.literal(1),
+	emdashVersion: z.string().min(1),
+	migrationSet: z.object({
+		names: z.array(z.string().regex(MIGRATION_NAME_PATTERN)).min(1).refine((names) => new Set(names).size === names.length),
+		fingerprint: z.string().regex(FINGERPRINT_PATTERN)
+	}).strict(),
+	i18n: i18nConfigSchema.nullable(),
+	database: z.object({
+		type: z.enum(["sqlite", "postgres"]),
+		executorEntrypoint: z.string().regex(EXECUTOR_ENTRYPOINT_PATTERN),
+		executorConfig: z.unknown()
+	}).strict()
+}).strict();
+var MigrationManifestValidationError = class extends Error {
+	constructor(message) {
+		super(`Invalid migration manifest: ${message}`);
+		this.name = "MigrationManifestValidationError";
+	}
+};
+function isEnvironmentReferenceKey(key) {
+	return ENVIRONMENT_REFERENCE_KEY_PATTERN.test(key);
+}
+function assertSafeUrl(value, path) {
+	if (!URL_SCHEME_PATTERN.test(value)) return;
+	let url;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new MigrationManifestValidationError(`${path} contains an invalid URL`);
+	}
+	if (CONNECTION_URL_PROTOCOLS.has(url.protocol)) throw new MigrationManifestValidationError(`${path} contains a database connection URL`);
+	if (url.username || url.password) throw new MigrationManifestValidationError(`${path} contains URL credentials`);
+	for (const key of url.searchParams.keys()) if (SECRET_QUERY_KEY_PATTERN.test(key)) throw new MigrationManifestValidationError(`${path} contains a credential query parameter`);
+}
+function cloneSecretFreeJson(value, path, ancestors) {
+	if (value === null || typeof value === "boolean") return value;
+	if (typeof value === "string") {
+		assertSafeUrl(value, path);
+		return value;
+	}
+	if (typeof value === "number") {
+		if (Number.isFinite(value)) return value;
+		throw new MigrationManifestValidationError(`${path} contains a non-finite number`);
+	}
+	if (typeof value !== "object") throw new MigrationManifestValidationError(`${path} is not JSON-serializable`);
+	if (ancestors.has(value)) throw new MigrationManifestValidationError(`${path} contains a cycle`);
+	ancestors.add(value);
+	try {
+		if (Array.isArray(value)) return value.map((item, index) => cloneSecretFreeJson(item, `${path}[${index}]`, ancestors));
+		const prototype = Object.getPrototypeOf(value);
+		if (prototype !== Object.prototype && prototype !== null) throw new MigrationManifestValidationError(`${path} contains a non-plain object`);
+		const cloned = {};
+		for (const [key, item] of Object.entries(value)) {
+			const itemPath = `${path}.${key}`;
+			const environmentReference = isEnvironmentReferenceKey(key);
+			if (!environmentReference && (SECRET_CONFIG_KEY_PATTERN.test(key) || SECRET_CONFIG_EXACT_KEY_PATTERN.test(key))) throw new MigrationManifestValidationError(`${itemPath} is a credential-bearing field`);
+			if (environmentReference) {
+				if (typeof item !== "string" || !ENVIRONMENT_VARIABLE_PATTERN.test(item)) throw new MigrationManifestValidationError(`${itemPath} must contain an environment-variable name`);
+			}
+			cloned[key] = cloneSecretFreeJson(item, itemPath, ancestors);
+		}
+		return cloned;
+	} finally {
+		ancestors.delete(value);
+	}
+}
+function validateSecretFreeExecutorConfig(value, path = "database.executorConfig") {
+	return cloneSecretFreeJson(value, path, /* @__PURE__ */ new Set());
+}
+function identitiesMatch(manifest, expectedIdentity) {
+	return manifest.emdashVersion === expectedIdentity.emdashVersion && manifest.migrationSet.fingerprint === expectedIdentity.fingerprint && manifest.migrationSet.names.length === expectedIdentity.names.length && manifest.migrationSet.names.every((name, index) => name === expectedIdentity.names[index]);
+}
+async function validateMigrationManifest(value, expectedIdentity) {
+	const parsed = migrationManifestV1Schema.safeParse(value);
+	if (!parsed.success) throw new MigrationManifestValidationError("schema validation failed");
+	const executorConfig = validateSecretFreeExecutorConfig(parsed.data.database.executorConfig);
+	const manifest = {
+		...parsed.data,
+		database: {
+			...parsed.data.database,
+			executorConfig
+		}
+	};
+	if (await fingerprintMigrationSet(manifest.emdashVersion, manifest.migrationSet.names) !== manifest.migrationSet.fingerprint) throw new MigrationManifestValidationError("migrationSet fingerprint does not match its version and ordered names");
+	if (expectedIdentity && !identitiesMatch(manifest, expectedIdentity)) throw new MigrationManifestValidationError("manifest does not match the loaded EmDash migration identity");
+	return manifest;
+}
+function serializeMigrationManifest(manifest) {
+	return `${JSON.stringify(manifest, null, "	")}\n`;
+}
+
+//#endregion
+//#region src/migrations/integration-metadata.ts
+const MIGRATION_CONFIG_SYMBOL = Symbol.for("emdash:migration-config");
+function isRecord(value) {
+	return typeof value === "object" && value !== null;
+}
+function isMigrationIntegrationMetadata(value) {
+	if (!isRecord(value)) return false;
+	const database = value.database;
+	if (database === void 0) return true;
+	if (!isRecord(database) || database.type !== "sqlite" && database.type !== "postgres") return false;
+	const migrations = database.migrations;
+	return migrations === void 0 || isRecord(migrations) && typeof migrations.entrypoint === "string" && Object.hasOwn(migrations, "manifestConfig");
+}
+function createMigrationIntegrationMetadata(database) {
+	if (!database) return {};
+	return { database: {
+		type: database.type,
+		migrations: database.migrations ? {
+			entrypoint: database.migrations.entrypoint,
+			manifestConfig: validateSecretFreeExecutorConfig(database.migrations.manifestConfig, "database.migrations.manifestConfig")
+		} : void 0
+	} };
+}
+function getMigrationIntegrationMetadata(integration) {
+	if ((typeof integration !== "object" || integration === null) && typeof integration !== "function") return;
+	if (!Object.hasOwn(integration, MIGRATION_CONFIG_SYMBOL)) return;
+	const metadata = Reflect.get(integration, MIGRATION_CONFIG_SYMBOL);
+	return isMigrationIntegrationMetadata(metadata) ? metadata : void 0;
+}
+
+//#endregion
+//#region src/migrations/manifest-builder.ts
+var UnsupportedMigrationAdapterError = class extends Error {
+	constructor() {
+		super("The configured database adapter does not provide a deployment migration executor");
+		this.name = "UnsupportedMigrationAdapterError";
+	}
+};
+async function buildMigrationManifest({ identity, i18n, database }) {
+	if (await fingerprintMigrationSet(identity.emdashVersion, identity.names) !== identity.fingerprint) throw new MigrationManifestValidationError("loaded identity fingerprint does not match its version and ordered names");
+	if (!database.migrations) throw new UnsupportedMigrationAdapterError();
+	return validateMigrationManifest({
+		schemaVersion: 1,
+		emdashVersion: identity.emdashVersion,
+		migrationSet: {
+			names: [...identity.names],
+			fingerprint: identity.fingerprint
+		},
+		i18n,
+		database: {
+			type: database.type,
+			executorEntrypoint: database.migrations.entrypoint,
+			executorConfig: database.migrations.manifestConfig
+		}
+	}, identity);
+}
+
+//#endregion
+export { MigrationManifestValidationError as a, normalizeAstroI18n as c, getMigrationIntegrationMetadata as i, MIGRATION_CONFIG_SYMBOL as n, serializeMigrationManifest as o, createMigrationIntegrationMetadata as r, validateMigrationManifest as s, buildMigrationManifest as t };
+//# sourceMappingURL=manifest-builder-BfNlGQIA.mjs.map

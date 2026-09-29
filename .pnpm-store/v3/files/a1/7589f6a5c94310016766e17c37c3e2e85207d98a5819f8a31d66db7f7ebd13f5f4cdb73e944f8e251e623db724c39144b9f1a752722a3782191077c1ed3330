@@ -1,0 +1,7 @@
+import * as astro from "astro";
+
+//#region src/astro/middleware/media-usage-write-fence.d.ts
+declare const onRequest: astro.MiddlewareHandler;
+//#endregion
+export { onRequest as default, onRequest };
+//# sourceMappingURL=media-usage-write-fence.d.mts.map

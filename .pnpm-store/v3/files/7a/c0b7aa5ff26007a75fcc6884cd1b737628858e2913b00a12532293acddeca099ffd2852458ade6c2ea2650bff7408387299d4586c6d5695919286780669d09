@@ -1,0 +1,46 @@
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../byline-registry-BxDGIO0I.mjs";
+import { a as unwrapResult, i as requireDb } from "../../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import "../../../../../media-C1EIZKh1.mjs";
+import "../../../../../entry-lock-DIYHAaSw.mjs";
+import { d as bylineFieldCreateBody } from "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+import { i as handleBylineFieldList, t as handleBylineFieldCreate } from "../../../../../byline-fields-DPVRFMz2.mjs";
+
+//#region src/astro/routes/api/admin/byline-fields/index.ts
+const prerender = false;
+const GET = async ({ locals }) => {
+	const { emdash, user } = locals;
+	const denied = requirePerm(user, "schema:read");
+	if (denied) return denied;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	return unwrapResult(await handleBylineFieldList(emdash.db));
+};
+const POST = async ({ request, locals }) => {
+	const { emdash, user } = locals;
+	const denied = requirePerm(user, "schema:manage");
+	if (denied) return denied;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const body = await parseBody(request, bylineFieldCreateBody);
+	if (isParseError(body)) return body;
+	return unwrapResult(await handleBylineFieldCreate(emdash.db, {
+		slug: body.slug,
+		label: body.label,
+		type: body.type,
+		required: body.required,
+		translatable: body.translatable,
+		validation: body.validation ?? null,
+		sortOrder: body.sortOrder
+	}), 201);
+};
+
+//#endregion
+export { GET, POST, prerender };
+//# sourceMappingURL=index.mjs.map

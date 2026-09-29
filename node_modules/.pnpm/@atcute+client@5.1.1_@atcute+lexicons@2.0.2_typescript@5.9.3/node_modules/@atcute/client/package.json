@@ -1,0 +1,41 @@
+{
+  "name": "@atcute/client",
+  "version": "5.1.1",
+  "description": "lightweight and cute API client for AT Protocol",
+  "license": "0BSD",
+  "repository": {
+    "url": "https://github.com/mary-ext/atcute",
+    "directory": "packages/clients/client"
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.{test,bench}.*"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@atcute/identity": "^2.0.1",
+    "@atcute/lexicons": "^2.0.2"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.9",
+    "vitest": "^4.1.9",
+    "@atcute/atproto": "^4.0.3",
+    "@atcute/bluesky": "^4.0.12",
+    "@atcute/internal-dev-env": "^1.0.2"
+  },
+  "peerDependencies": {
+    "@atcute/lexicons": "^2.0.0"
+  },
+  "scripts": {
+    "build": "tsgo",
+    "postbuild": "node ./scripts/ensure-files.js",
+    "test": "vitest run --coverage",
+    "prepublish": "rm -rf dist; pnpm run build"
+  }
+}

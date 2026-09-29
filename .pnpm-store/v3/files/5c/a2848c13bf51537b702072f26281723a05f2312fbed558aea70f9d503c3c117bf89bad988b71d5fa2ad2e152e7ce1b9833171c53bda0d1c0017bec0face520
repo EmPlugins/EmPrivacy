@@ -1,0 +1,83 @@
+import "../dialect-helpers-BcQvkHgn.mjs";
+import "../config-C3EBstHi.mjs";
+import "../after-CBU2vkoO.mjs";
+import "../object-cache-DVKnyOfy.mjs";
+import "../content-CNfMWuhY.mjs";
+import "../slugify-B994zkXC.mjs";
+import "../base64-CvLhUKQv.mjs";
+import "../types-CQPWhPxE.mjs";
+import "../media-BBm8Wg3f.mjs";
+import "../options-D1FBiAv1.mjs";
+import "../resolve-Cy0aWSRj.mjs";
+import "../request-cache-DAZZmesc.mjs";
+import "../fts-manager-iddym8cd.mjs";
+import "../loader-WJi6GFRn.mjs";
+import "../collection-slugs-cache-7lTmNzeA.mjs";
+import "../capture-triggers-CeAsC76Z.mjs";
+import "../activation-DyNTe_Tl.mjs";
+import "../collection-deletion-BCwaWTDw.mjs";
+import "../content-refresh-GTMyi2Xy.mjs";
+import "../registry-DTqaqxed.mjs";
+import "../query-gtXT03Wc.mjs";
+import "../settings-DcMjREe5.mjs";
+import { n as resolveSeoCanonicalUrl, t as buildSeoImageUrl } from "../media-url-8dVl1loq.mjs";
+import { n as getHreflangAlternatesWithDb, t as getHreflangAlternates } from "../hreflang-DshnweTC.mjs";
+
+//#region src/seo/index.ts
+const TRAILING_SLASH_RE = /\/$/;
+/**
+* Generate resolved SEO meta tags from a content item.
+*
+* Uses the content item's SEO fields, falling back to content data
+* (title from `data.title`, description from `data.excerpt`).
+*
+* @param content - The content item (from getEmDashEntry, etc.)
+* @param options - Configuration for title construction, canonical URLs, etc.
+* @returns Resolved meta tags ready for template use
+*/
+function getSeoMeta(content, options = {}) {
+	const { siteTitle, siteUrl, path, defaultOgImage, defaultTitle, defaultDescription } = options;
+	const separator = options.titleSeparator || " | ";
+	const seo = content.seo ?? content.data.seo ?? {
+		title: null,
+		description: null,
+		image: null,
+		canonical: null,
+		noIndex: false
+	};
+	const pageTitle = seo.title || defaultTitle || (typeof content.data.title === "string" ? content.data.title : null) || "";
+	const fullTitle = siteTitle && pageTitle ? `${pageTitle}${separator}${siteTitle}` : pageTitle;
+	const description = seo.description || defaultDescription || (typeof content.data.excerpt === "string" ? content.data.excerpt : null) || null;
+	const ogImage = seo.image ? buildSeoImageUrl(seo.image, siteUrl) : defaultOgImage ?? null;
+	let canonical = null;
+	if (seo.canonical) canonical = resolveSeoCanonicalUrl(seo.canonical, siteUrl);
+	else if (siteUrl && path) {
+		const safePath = path.startsWith("/") ? path : `/${path}`;
+		canonical = `${siteUrl.replace(TRAILING_SLASH_RE, "")}${safePath}`;
+	}
+	const robots = seo.noIndex ? "noindex, nofollow" : null;
+	return {
+		title: fullTitle,
+		description,
+		ogTitle: pageTitle || fullTitle,
+		ogDescription: description,
+		ogImage,
+		canonical,
+		robots
+	};
+}
+/**
+* Extract SEO data from a content item.
+*
+* Convenience accessor for the raw SEO fields without template resolution.
+*
+* @param content - The content item
+* @returns The content's SEO fields
+*/
+function getContentSeo(content) {
+	return content.seo ?? content.data.seo;
+}
+
+//#endregion
+export { getContentSeo, getHreflangAlternates, getHreflangAlternatesWithDb, getSeoMeta };
+//# sourceMappingURL=index.mjs.map

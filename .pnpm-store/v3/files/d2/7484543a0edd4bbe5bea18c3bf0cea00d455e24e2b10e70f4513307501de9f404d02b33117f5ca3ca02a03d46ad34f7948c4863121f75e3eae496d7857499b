@@ -1,0 +1,37 @@
+import { i as VerificationResult } from "./errors-CkfpF-0R.js";
+
+//#region src/fetch.d.ts
+declare const DEFAULT_FETCH_LIMITS: {
+  readonly headerTimeoutMs: 10000;
+  readonly totalTimeoutMs: 30000;
+  readonly maxBytes: number;
+  readonly maxRedirects: 3;
+};
+type FetchImplementation = (input: URL, init: RequestInit) => Promise<Response>;
+/**
+ * Resolves every hostname before it is fetched. Returned addresses are checked
+ * for local and private ranges. Workers cannot pin fetch() to these addresses,
+ * so callers with private-network access must use an egress proxy that does.
+ */
+type HostnameResolver = (hostname: string) => Promise<readonly string[]>;
+interface FetchVerifiedResourceOptions {
+  fetch: FetchImplementation;
+  resolveHostname: HostnameResolver;
+  allowHttpLocalhost?: boolean;
+  /** Non-success statuses that the caller needs to inspect as bounded responses. */
+  allowedStatuses?: readonly number[];
+  headerTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  maxBytes?: number;
+  maxRedirects?: number;
+}
+interface VerifiedResource {
+  bytes: Uint8Array;
+  url: URL;
+  status: number;
+  headers: Headers;
+}
+declare function fetchVerifiedResource(value: string | URL, options: FetchVerifiedResourceOptions): Promise<VerificationResult<VerifiedResource>>;
+//#endregion
+export { VerifiedResource as a, HostnameResolver as i, FetchImplementation as n, fetchVerifiedResource as o, FetchVerifiedResourceOptions as r, DEFAULT_FETCH_LIMITS as t };
+//# sourceMappingURL=fetch-Dk7xlhK0.d.ts.map

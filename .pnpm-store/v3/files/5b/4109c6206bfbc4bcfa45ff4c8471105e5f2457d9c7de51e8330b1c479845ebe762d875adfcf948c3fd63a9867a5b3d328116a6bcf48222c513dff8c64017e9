@@ -1,0 +1,55 @@
+import "../dialect-helpers-BcQvkHgn.mjs";
+import "../config-C3EBstHi.mjs";
+import "../after-CBU2vkoO.mjs";
+import "../object-cache-DVKnyOfy.mjs";
+import "../content-CNfMWuhY.mjs";
+import "../slugify-B994zkXC.mjs";
+import "../base64-CvLhUKQv.mjs";
+import "../types-CQPWhPxE.mjs";
+import "../media-BBm8Wg3f.mjs";
+import "../user-DIsIXogT.mjs";
+import "../taxonomy-DP1vny4K.mjs";
+import { t as OptionsRepository } from "../options-D1FBiAv1.mjs";
+import { i as createStorageAccess } from "../context-C9PB8vGd.mjs";
+import "../request-cache-DAZZmesc.mjs";
+import "../dist-BAsh8dbf.mjs";
+import "../enrich-t2Xvjdqa.mjs";
+import "../entry-locks-BEcX7ET0.mjs";
+import "../seo-Bw68KxRc.mjs";
+import "../loader-WJi6GFRn.mjs";
+import "../capture-triggers-CeAsC76Z.mjs";
+import "../activation-DyNTe_Tl.mjs";
+import "../content-refresh-GTMyi2Xy.mjs";
+import "../settings-DcMjREe5.mjs";
+import "../ssrf-gl4gFNhw.mjs";
+import { n as apiSuccess, r as handleError, t as apiError } from "../error-BDcFyoRt.mjs";
+import { i as parseQuery, n as parseBody, t as isParseError } from "../parse-WRg5C3NX.mjs";
+import "../ssrf-TQhaljuI.mjs";
+import "../cron-DHAy9oyq.mjs";
+import { r as getPublicOrigin } from "../public-url-FWWAvnre.mjs";
+import { t as finalizeSetup } from "../setup-complete-BClXXTvr.mjs";
+
+//#region src/api/auth-storage.ts
+/**
+* Get storage collections for an auth provider.
+*
+* Returns a record of `StorageCollection` instances, one per declared
+* collection in the provider's `storage` config. Data is stored in the
+* shared `_plugin_storage` table under the namespace `auth:<providerId>`.
+*
+* @example
+* ```ts
+* const storage = getAuthProviderStorage(emdash.db, "atproto", {
+*   states: { indexes: [] },
+*   sessions: { indexes: [] },
+* });
+* const session = await storage.sessions.get(sessionId);
+* ```
+*/
+function getAuthProviderStorage(db, providerId, storageConfig) {
+	return createStorageAccess(db, `auth:${providerId}`, storageConfig);
+}
+
+//#endregion
+export { OptionsRepository, apiError, apiSuccess, finalizeSetup, getAuthProviderStorage, getPublicOrigin, handleError, isParseError, parseBody, parseQuery };
+//# sourceMappingURL=route-utils.mjs.map

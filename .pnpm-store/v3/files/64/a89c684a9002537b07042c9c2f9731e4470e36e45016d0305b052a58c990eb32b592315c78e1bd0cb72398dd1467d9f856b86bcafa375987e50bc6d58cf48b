@@ -1,0 +1,38 @@
+import "../../../../../dialect-helpers-BcQvkHgn.mjs";
+import "../../../../../config-C3EBstHi.mjs";
+import "../../../../../base64-CvLhUKQv.mjs";
+import "../../../../../types-CQPWhPxE.mjs";
+import "../../../../../media-BBm8Wg3f.mjs";
+import "../../../../../fts-manager-iddym8cd.mjs";
+import "../../../../../capture-triggers-CeAsC76Z.mjs";
+import "../../../../../activation-DyNTe_Tl.mjs";
+import "../../../../../collection-deletion-BCwaWTDw.mjs";
+import "../../../../../content-refresh-GTMyi2Xy.mjs";
+import "../../../../../media-usage-work-C5B1zT1c.mjs";
+import "../../../../../content-repair-CIMt5C0U.mjs";
+import { i as handleMediaUsageRepair } from "../../../../../media-usage-C1EswMTq.mjs";
+import { a as unwrapResult, i as requireDb } from "../../../../../error-BDcFyoRt.mjs";
+import { n as parseBody, t as isParseError } from "../../../../../parse-WRg5C3NX.mjs";
+import { et as mediaUsageRepairBody } from "../../../../../media-C1EIZKh1.mjs";
+import "../../../../../entry-lock-DIYHAaSw.mjs";
+import "../../../../../relations-rOmbndUJ.mjs";
+import "../../../../../status-Cenfk_r5.mjs";
+import "../../../../../api/schemas/index.mjs";
+import { r as requirePerm } from "../../../../../authorize-C2QHlWSS.mjs";
+
+//#region src/astro/routes/api/admin/media-usage/repair.ts
+const prerender = false;
+const POST = async ({ request, locals }) => {
+	const { emdash, user } = locals;
+	const dbErr = requireDb(emdash?.db);
+	if (dbErr) return dbErr;
+	const denied = requirePerm(user, "schema:manage");
+	if (denied) return denied;
+	const body = await parseBody(request, mediaUsageRepairBody);
+	if (isParseError(body)) return body;
+	return unwrapResult(await handleMediaUsageRepair(emdash.db, body));
+};
+
+//#endregion
+export { POST, prerender };
+//# sourceMappingURL=repair.mjs.map

@@ -1,0 +1,3 @@
+import { CAPABILITY_RENAMES, capabilitiesToDeclaredAccess as capabilitiesToDeclaredAccess$1, isDeprecatedCapability, normalizeCapabilities, normalizeCapability } from "@emdash-cms/plugin-types";
+
+export { normalizeCapability as a, normalizeCapabilities as i, capabilitiesToDeclaredAccess$1 as n, isDeprecatedCapability as r, CAPABILITY_RENAMES as t };

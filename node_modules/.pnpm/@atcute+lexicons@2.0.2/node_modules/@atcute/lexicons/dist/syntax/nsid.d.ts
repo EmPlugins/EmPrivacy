@@ -1,0 +1,3 @@
+/** represents a namespace identifier (NSID) */
+export type Nsid = `${string}.${string}.${string}`;
+export declare const isNsid: (input: unknown) => input is Nsid;
