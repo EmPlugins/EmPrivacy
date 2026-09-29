@@ -9,7 +9,9 @@ This guide is for **EmDash site managers** who want cookie consent on a live sit
 - A **banner** on first visit (or after you change **Policy / consent version**, or after an upgrade that adds the functional category).
 - Toggles for **Functional**, **Analytics**, and **Marketing**. Essential cookies stay on.
 - **Privacy and cookie policy links** you control (EmDash Page path or `https://`).
-- Analytics presets (Cloudflare, Plausible, Fathom, Umami, Simple Analytics, GA4, GTM under Marketing) plus Custom / None.
+- Analytics presets (Cloudflare, Plausible, Fathom, Umami, Simple Analytics, GA4, GTM under Marketing, Microsoft Clarity under Analytics, Microsoft UET under Marketing) plus Custom / None.
+- **Global Privacy Control** keeps Marketing off when the browser sends that signal.
+- A signed-in admin download of the consent log when server logging is on.
 - Optional **gated embeds** for official EmDash YouTube / Vimeo / social / Gist blocks.
 - A **vendor list** generated from your settings.
 
@@ -92,7 +94,7 @@ Your base layout must include `<EmDashHead page={page} />`, `<EmDashBodyStart pa
 3. Choose an **Analytics platform** and fill the matching ID or token. Leave it on **None** if you do not use analytics.
 4. Optional: marketing script URLs (one `https://` `src` per line — never a `<script>` tag).
 5. Optional: gate embeds; pick Functional vs Marketing.
-6. Optional: hex theme colors, locale JSON overrides, Google Consent Mode, server log.
+6. Optional: banner position (bottom or top), a banner theme profile or custom hex colors, locale JSON overrides, Google Consent Mode, server log. When the log is on, the same page links to the CSV download.
 7. **Save settings**.
 
 The **What this site uses** table on the same page is generated from the saved config. You can copy it into the cookie policy. Tokens are never listed.
@@ -136,7 +138,7 @@ Do not read `emprivacy_cc` yourself. The JSON shape can change with a major rele
 | YouTube still loads immediately | Embeds plugin is registered **after** EmPrivacy, so its renderers win. Move EmPrivacy last or pass `blockComponents` on `PortableText`. |
 | Embeds stay blocked after accept | Category is Marketing but you only enabled Functional (or the reverse). |
 | Save fails on policy URL | Must be `/path` or `https://…` |
-| Save fails on analytics ID | Plausible wants `example.com` (no scheme). GA4 wants `G-…`. GTM wants `GTM-…`. Umami needs an https script URL. |
+| Save fails on analytics ID | Plausible wants `example.com` (no scheme). GA4 wants `G-…`. GTM wants `GTM-…`. Clarity wants a 7–20 character project ID. UET wants 6–12 digits. Umami needs an https script URL. |
 | Privacy link 404 | Path must match the live Page route |
 
 ---

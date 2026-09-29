@@ -2,9 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { isPolicyPagePath, normalizeConfig } from "./config.js";
+import { isPolicyPagePath, jsonForHtmlScript, normalizeConfig } from "./config.js";
 import { parseLocaleOverridesText, resolveBannerCopy, chromeForLocale } from "./i18n.js";
-import { isSafeHexColor, parseRadiusInput } from "./theme.js";
+import { isSafeHexColor, parseRadiusInput, THEME_PROFILES } from "./theme.js";
 import { buildAnalyticsLoader, buildVendorList } from "./vendors.js";
 
 describe("theme", () => {
@@ -19,6 +19,33 @@ describe("theme", () => {
 		expect(parseRadiusInput("6", 6)).toBe(6);
 		expect(() => parseRadiusInput("99", 6)).toThrow(/0 to 24/);
 		expect(() => parseRadiusInput("6px", 6)).toThrow();
+	});
+
+	it("starts on the first profile when no theme choice is stored", () => {
+		const n = normalizeConfig({ theme: { bg: "#112233", text: "#eeeeee", accent: "#3b82f6", radiusPx: 4 } });
+		expect(n.themeProfile).toBe("slate");
+		expect(n.theme).toEqual(THEME_PROFILES.slate);
+		expect(normalizeConfig(null).theme).toEqual(THEME_PROFILES.slate);
+	});
+
+	it("keeps explicit custom colors for the manual fields", () => {
+		const n = normalizeConfig({
+			themeProfile: "custom",
+			theme: { bg: "#112233", text: "#eeeeee", accent: "#3b82f6", radiusPx: 4 },
+		});
+		expect(n.themeProfile).toBe("custom");
+		expect(n.theme.bg).toBe("#112233");
+		expect(n.theme.radiusPx).toBe(4);
+	});
+
+	it("replaces stored colors with the fixed profile palette", () => {
+		const n = normalizeConfig({
+			themeProfile: "slate",
+			theme: { bg: "red;background:url(https://evil)", text: "#fff", accent: "#fff", radiusPx: 99 },
+		});
+		expect(n.theme).toEqual(THEME_PROFILES.slate);
+		expect(jsonForHtmlScript(n.theme)).not.toContain("url");
+		expect(normalizeConfig({ themeProfile: "not-a-theme" }).themeProfile).toBe("slate");
 	});
 });
 
@@ -65,6 +92,26 @@ describe("vendors", () => {
 		expect(buildAnalyticsLoader(cfg)).toEqual({ type: "gtm", containerId: "GTM-ABCD" });
 		const gtm = buildVendorList(cfg).find((v) => v.id === "gtm");
 		expect(gtm?.category).toBe("marketing");
+	});
+
+	it("keeps Clarity on analytics and UET on marketing without publishing the ID", () => {
+		const clarity = normalizeConfig({ analyticsProvider: "clarity", analyticsId: "abcd1234" });
+		expect(buildAnalyticsLoader(clarity)).toEqual({ type: "clarity", projectId: "abcd1234" });
+		const clarityRow = buildVendorList(clarity).find((v) => v.id === "clarity");
+		expect(clarityRow?.category).toBe("analytics");
+		expect(JSON.stringify(clarityRow)).not.toContain("abcd1234");
+
+		const uet = normalizeConfig({ analyticsProvider: "uet", analyticsId: "12345678" });
+		expect(buildAnalyticsLoader(uet)).toEqual({ type: "uet", tagId: "12345678" });
+		expect(buildVendorList(uet).find((v) => v.id === "uet")?.category).toBe("marketing");
+		expect(JSON.stringify(buildVendorList(uet))).not.toContain("12345678");
+
+		expect(buildAnalyticsLoader(normalizeConfig({ analyticsProvider: "clarity", analyticsId: "../evil" })).type).toBe(
+			"none",
+		);
+		expect(buildAnalyticsLoader(normalizeConfig({ analyticsProvider: "uet", analyticsId: "12ab" })).type).toBe(
+			"none",
+		);
 	});
 });
 

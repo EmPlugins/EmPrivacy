@@ -28,7 +28,8 @@ import {
 	pluginVersionFields,
 	pluginVersionNote,
 } from "./npm-version.js";
-import { buildBodyBootstrap, buildGoogleConsentHeadScript } from "./public-bootstrap.js";
+import { buildConsentCsv } from "./consent-csv.js";
+import { buildBodyBootstrap, buildGoogleConsentHeadScript, buildMicrosoftConsentHeadScript } from "./public-bootstrap.js";
 import {
 	assertSameOriginMutation,
 	cookieMaxAgeSeconds,
@@ -49,7 +50,10 @@ const recordInput = z.object({
 	functional: z.boolean(),
 	analytics: z.boolean(),
 	marketing: z.boolean(),
+	gpc: z.boolean().optional(),
 });
+
+const EXPORT_PATH = `/_emdash/api/plugins/${PLUGIN_ID}/consent-export`;
 
 async function loadConfig(ctx: PluginContext): Promise<EmprivacyConfig> {
 	const raw = (await ctx.kv.get(KV_KEY)) as string | null;
@@ -130,6 +134,7 @@ function publicRuntime(
 		embedCategory: cfg.embedCategory,
 		gateEmbeds: cfg.gateEmbeds,
 		hideBanner,
+		bannerPosition: cfg.bannerPosition,
 		theme: cfg.theme,
 		ui: copy.ui,
 		loader: buildAnalyticsLoader(cfg),
@@ -146,8 +151,9 @@ function publicRuntime(
 
 function themeStyle(): string {
 	return `<style id="emprivacy-style">
-#emprivacy-root{font-family:system-ui,sans-serif;font-size:14px;--emprivacy-bg:#111111;--emprivacy-text:#eeeeee;--emprivacy-accent:#3b82f6;--emprivacy-radius:6px}
-.emprivacy-bar{position:fixed;z-index:99999;left:0;right:0;bottom:0;background:var(--emprivacy-bg);color:var(--emprivacy-text);padding:16px 20px 20px;box-shadow:0 -4px 24px rgba(0,0,0,.25);max-height:45vh;overflow:auto}
+#emprivacy-root{font-family:system-ui,sans-serif;font-size:14px;--emprivacy-bg:#0f172a;--emprivacy-text:#f8fafc;--emprivacy-accent:#3b82f6;--emprivacy-radius:8px}
+.emprivacy-bar{position:fixed;z-index:99999;inset-inline:0;bottom:0;background:var(--emprivacy-bg);color:var(--emprivacy-text);padding:16px 20px max(20px, env(safe-area-inset-bottom));box-shadow:0 -4px 24px rgba(0,0,0,.25);max-height:min(45vh, 100dvh);overflow:auto}
+.emprivacy-bar--top{top:0;bottom:auto;padding:max(16px, env(safe-area-inset-top)) 20px 16px;box-shadow:0 4px 24px rgba(0,0,0,.25)}
 .emprivacy-title{margin:0 0 8px;font-size:1.1rem}
 .emprivacy-msg,.emprivacy-note{margin:0 0 10px;line-height:1.4;opacity:.95}
 .emprivacy-note{font-size:.85rem}
@@ -156,6 +162,8 @@ function themeStyle(): string {
 .emprivacy-switch{display:block;margin:6px 0}
 .emprivacy-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .emprivacy-btn{border-radius:var(--emprivacy-radius);border:1px solid color-mix(in srgb,var(--emprivacy-text) 35%,transparent);background:transparent;color:var(--emprivacy-text);padding:8px 12px;cursor:pointer}
+.emprivacy-btn:focus-visible,.emprivacy-switch input:focus-visible,.emprivacy-links a:focus-visible,.emprivacy-vendors summary:focus-visible,.emprivacy-bar:focus-visible{outline:2px solid var(--emprivacy-accent);outline-offset:2px}
+.emprivacy-btn-primary:focus-visible{outline-color:#fff}
 .emprivacy-btn-primary{background:var(--emprivacy-accent);border-color:var(--emprivacy-accent);color:#fff}
 .emprivacy-cookie-trigger{position:fixed;z-index:99998;left:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:1px solid color-mix(in srgb,var(--emprivacy-text) 35%,transparent);background:var(--emprivacy-bg);color:var(--emprivacy-text);box-shadow:0 2px 12px rgba(0,0,0,.2);cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
 .emprivacy-cookie-trigger:hover{filter:brightness(1.1)}
@@ -251,6 +259,14 @@ export function createPlugin() {
 							code: buildGoogleConsentHeadScript(),
 						});
 					}
+					if (cfg.analyticsProvider === "clarity" || cfg.analyticsProvider === "uet") {
+						headScripts.push({
+							kind: "inline-script",
+							placement: "head",
+							key: "emprivacy:ms-consent-default",
+							code: buildMicrosoftConsentHeadScript(cfg.analyticsProvider),
+						});
+					}
 					const boot: PageFragmentContribution = {
 						kind: "inline-script",
 						placement: "body:end",
@@ -301,6 +317,8 @@ export function createPlugin() {
 								embedCategory: String(v.embed_category ?? "marketing"),
 								gateEmbeds: asBool(v.gate_embeds),
 								hideBannerOnPolicyPages: asBool(v.hide_on_policy),
+								bannerPosition: String(v.banner_position ?? "bottom"),
+								themeProfile: String(v.theme_profile ?? "slate"),
 								defaultLocale: String(v.default_locale ?? "en"),
 								localeOverridesText: String(v.locale_overrides ?? ""),
 								themeBg: String(v.theme_bg ?? ""),
@@ -359,12 +377,14 @@ export function createPlugin() {
 					if (!(await allowRecordWrite(ctx, ctx.request))) {
 						return new Response("rate_limited", { status: 429 });
 					}
+					const gpc = input.gpc === true;
 					const row: ConsentRecordPayload = {
 						createdAt: new Date().toISOString(),
 						policyVersion: input.policyVersion,
 						functional: input.functional,
 						analytics: input.analytics,
-						marketing: input.marketing,
+						marketing: gpc ? false : input.marketing,
+						...(gpc ? { gpc: true } : {}),
 					};
 					try {
 						const existing = await ctx.storage.consentEvents.query({
@@ -383,6 +403,36 @@ export function createPlugin() {
 						row,
 					);
 					return { ok: true };
+				},
+			},
+			"consent-export": {
+				handler: async (ctx: RouteContext) => {
+					if (ctx.request.method !== "GET") {
+						return new Response("method_not_allowed", { status: 405 });
+					}
+					if (!ctx.user) {
+						return new Response("unauthorized", { status: 401 });
+					}
+					let rows: ConsentRecordPayload[] = [];
+					try {
+						const existing = await ctx.storage.consentEvents.query({
+							orderBy: { createdAt: "desc" },
+							limit: RECORD_LOG_CAP,
+						});
+						rows = existing.items.map((item) => item.data as ConsentRecordPayload);
+					} catch {
+						return new Response("export_unavailable", { status: 503 });
+					}
+					const body = buildConsentCsv(rows);
+					return new Response(body, {
+						status: 200,
+						headers: {
+							"Content-Type": "text/csv; charset=utf-8",
+							"Content-Disposition": 'attachment; filename="emprivacy-consent.csv"',
+							"Cache-Control": "private, no-store",
+							"X-Content-Type-Options": "nosniff",
+						},
+					});
 				},
 			},
 			vendors: {
@@ -442,9 +492,10 @@ async function buildSettingsPage(ctx: PluginContext) {
 				const d = item.data as ConsentRecordPayload;
 				const functional =
 					typeof d.functional === "boolean" ? ` · functional ${d.functional ? "on" : "off"}` : "";
+				const gpc = d.gpc === true ? " · GPC" : "";
 				return {
 					label: d.createdAt,
-					value: `policy ${d.policyVersion}${functional} · analytics ${d.analytics ? "on" : "off"} · marketing ${d.marketing ? "on" : "off"}`,
+					value: `policy ${d.policyVersion}${functional} · analytics ${d.analytics ? "on" : "off"} · marketing ${d.marketing ? "on" : "off"}${gpc}`,
 				};
 			});
 		} catch {
@@ -545,6 +596,16 @@ async function buildSettingsPage(ctx: PluginContext) {
 					},
 					{
 						type: "radio" as const,
+						action_id: "banner_position",
+						label: "Banner position",
+						options: [
+							{ value: "bottom", label: "Bottom of the viewport" },
+							{ value: "top", label: "Top of the viewport" },
+						],
+						initial_value: cfg.bannerPosition,
+					},
+					{
+						type: "radio" as const,
 						action_id: "analytics_platform",
 						label: "Analytics platform",
 						options: [
@@ -555,6 +616,8 @@ async function buildSettingsPage(ctx: PluginContext) {
 							{ value: "simpleanalytics", label: "Simple Analytics" },
 							{ value: "ga4", label: "Google Analytics 4" },
 							{ value: "gtm", label: "Google Tag Manager (requires Marketing consent)" },
+							{ value: "clarity", label: "Microsoft Clarity (requires Analytics consent)" },
+							{ value: "uet", label: "Microsoft UET (requires Marketing consent)" },
 							{ value: "none", label: "None" },
 							{ value: "custom", label: "Custom (https script URLs, one per line)" },
 						],
@@ -571,8 +634,8 @@ async function buildSettingsPage(ctx: PluginContext) {
 					{
 						type: "text_input" as const,
 						action_id: "analytics_id",
-						label: "Analytics ID (domain, site ID, G-…, or GTM-…)",
-						placeholder: "example.com / G-XXXX / GTM-XXXX",
+						label: "Analytics ID (domain, site ID, G-…, GTM-…, Clarity project ID, or UET tag ID)",
+						placeholder: "example.com / G-XXXX / GTM-XXXX / Clarity ID / UET digits",
 						initial_value: cfg.analyticsId,
 					},
 					{
@@ -641,18 +704,34 @@ async function buildSettingsPage(ctx: PluginContext) {
 						initial_value: cfg.embedCategory,
 					},
 					{
+						type: "radio" as const,
+						action_id: "theme_profile",
+						label: "Banner theme",
+						options: [
+							{ value: "slate", label: "Slate" },
+							{ value: "paper", label: "Paper" },
+							{ value: "ink", label: "Ink" },
+							{ value: "indigo", label: "Indigo" },
+							{ value: "primer", label: "Primer" },
+							{ value: "custom", label: "Custom colors" },
+						],
+						initial_value: cfg.themeProfile,
+					},
+					{
 						type: "text_input" as const,
 						action_id: "theme_bg",
 						label: "Banner background (hex)",
-						placeholder: "#111111",
+						placeholder: "#0f172a",
 						initial_value: cfg.theme.bg,
+						condition: { field: "theme_profile", eq: "custom" },
 					},
 					{
 						type: "text_input" as const,
 						action_id: "theme_text",
 						label: "Banner text (hex)",
-						placeholder: "#eeeeee",
+						placeholder: "#f8fafc",
 						initial_value: cfg.theme.text,
+						condition: { field: "theme_profile", eq: "custom" },
 					},
 					{
 						type: "text_input" as const,
@@ -660,12 +739,14 @@ async function buildSettingsPage(ctx: PluginContext) {
 						label: "Banner accent (hex)",
 						placeholder: "#3b82f6",
 						initial_value: cfg.theme.accent,
+						condition: { field: "theme_profile", eq: "custom" },
 					},
 					{
 						type: "text_input" as const,
 						action_id: "theme_radius",
 						label: "Banner corner radius (0–24 px)",
-						placeholder: "6",
+						condition: { field: "theme_profile", eq: "custom" },
+						placeholder: "8",
 						initial_value: String(cfg.theme.radiusPx),
 					},
 					{
@@ -690,7 +771,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 				type: "fields" as const,
 				fields: vendorFields,
 			},
-			...(cfg.logConsentToServer && consentFields.length > 0
+			...(cfg.logConsentToServer
 				? [
 						{ type: "divider" as const },
 						{
@@ -698,9 +779,17 @@ async function buildSettingsPage(ctx: PluginContext) {
 							text: "Recent consent records",
 						},
 						{
-							type: "fields" as const,
-							fields: consentFields,
+							type: "context" as const,
+							text: `Download the log (up to ${RECORD_LOG_CAP} rows, no IP): ${EXPORT_PATH}. Signed-in admins only. Cells that start with = + - or @ are prefixed so a spreadsheet does not treat them as formulas.`,
 						},
+						...(consentFields.length > 0
+							? [
+									{
+										type: "fields" as const,
+										fields: consentFields,
+									},
+								]
+							: []),
 					]
 				: []),
 		],

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { PURGE_RULES } from "./cookie-purge.js";
 import { COOKIE_NAME, jsonForHtmlScript, type EmprivacyPublicRuntimeConfig } from "./config.js";
 
 /**
@@ -8,11 +9,13 @@ import { COOKIE_NAME, jsonForHtmlScript, type EmprivacyPublicRuntimeConfig } fro
  */
 export function buildBodyBootstrap(pr: EmprivacyPublicRuntimeConfig): string {
 	const jsonLiteral = jsonForHtmlScript(pr);
+	const purgeLiteral = jsonForHtmlScript(PURGE_RULES);
 	return `(function(){
 var C=${jsonLiteral};
 var CN="${COOKIE_NAME}";
+var PURGE=${purgeLiteral};
 var listeners=[];
-var PRESET_HOSTS={"static.cloudflareinsights.com":1,"plausible.io":1,"cdn.usefathom.com":1,"scripts.simpleanalyticscdn.com":1,"www.googletagmanager.com":1,"googletagmanager.com":1};
+var PRESET_HOSTS={"static.cloudflareinsights.com":1,"plausible.io":1,"cdn.usefathom.com":1,"scripts.simpleanalyticscdn.com":1,"www.googletagmanager.com":1,"googletagmanager.com":1,"www.clarity.ms":1,"clarity.ms":1,"bat.bing.com":1};
 var YT_IFRAME=/^https:\\/\\/(?:www\\.)?youtube-nocookie\\.com\\/embed\\/[A-Za-z0-9_-]{11}\\/?$/;
 var VIMEO_IFRAME=/^https:\\/\\/player\\.vimeo\\.com\\/video\\/\\d{6,12}\\/?$/;
 function readCookie(){
@@ -39,7 +42,64 @@ if(!flagOk(o.a)||!flagOk(o.m)||!flagOk(o.f))return null;
 return {v:o.v,essential:true,functional:!!o.f,analytics:!!o.a,marketing:!!o.m};
 }catch(e){return null;}
 }
-function currentState(){return parseState(readCookie());}
+function gpcOn(){
+try{return navigator.globalPrivacyControl===true;}catch(e){return false;}
+}
+function effective(st){
+if(!st)return null;
+var g=gpcOn();
+return {v:st.v,essential:true,functional:!!st.functional,analytics:!!st.analytics,marketing:g?false:!!st.marketing,gpc:g};
+}
+function currentState(){return effective(parseState(readCookie()));}
+function cookieNameOk(name){return /^[A-Za-z0-9_]{1,64}$/.test(name);}
+function expireCookie(name){
+if(!cookieNameOk(name)||name===CN)return;
+var secure=document.location.protocol==="https:"?"; Secure":"";
+var base=name+"=; Max-Age=0; Path=/; SameSite=Lax"+secure;
+document.cookie=base;
+var host=String(document.location.hostname||"");
+if(!/^[A-Za-z0-9.-]{1,253}$/.test(host)||host.indexOf("..")>=0)return;
+var hosts=[host];
+var labels=host.split(".");
+if(labels.length>=3)hosts.push(labels.slice(1).join("."));
+for(var i=0;i<hosts.length;i++){
+var h=hosts[i];
+if(!/^[A-Za-z0-9.-]{1,253}$/.test(h))continue;
+document.cookie=base+"; Domain="+h;
+document.cookie=base+"; Domain=."+h;
+}
+}
+function purgeSet(exact,prefixes){
+var raw="";
+try{raw=document.cookie;}catch(e){return;}
+if(!raw)return;
+if(raw.length>8192)raw=raw.slice(0,8192);
+raw.split(";").forEach(function(part){
+var name=(part.split("=")[0]||"").replace(/^\\s+/,"");
+if(!cookieNameOk(name)||name===CN)return;
+var hit=exact.indexOf(name)>=0;
+if(!hit){
+for(var i=0;i<prefixes.length;i++){
+if(prefixes[i]&&name.indexOf(prefixes[i])===0){hit=true;break;}
+}
+}
+if(hit)expireCookie(name);
+});
+}
+function purgeDenied(st){
+var rules=PURGE||{};
+if(!st.analytics){
+var a=rules.analytics||{};
+purgeSet(a.exact||[],a.prefix||[]);
+}
+if(!st.marketing){
+var m=rules.marketing||{};
+purgeSet(m.exact||[],m.prefix||[]);
+}
+}
+function deniedState(){
+return {v:"",essential:true,functional:false,analytics:false,marketing:false,gpc:gpcOn()};
+}
 function emit(st){
 listeners.slice().forEach(function(fn){try{fn(st);}catch(e){}});
 try{document.dispatchEvent(new CustomEvent("emprivacy:change",{detail:st}));}catch(e){}
@@ -123,7 +183,7 @@ e.setAttribute("data-cf-beacon",JSON.stringify({token:token}));
 e.referrerPolicy="no-referrer-when-downgrade";
 document.head.appendChild(e);
 }
-function applyAnalytics(){
+function applyAnalytics(st){
 var L=C.loader||{type:"none"};
 if(L.type==="cloudflare") loadCloudflareBeacon(L.token);
 else if(L.type==="custom") (L.scripts||[]).forEach(function(s){loadScript(s.src,null,s.integrity,false);});
@@ -138,6 +198,13 @@ loadScript("https://www.googletagmanager.com/gtag/js?id="+encodeURIComponent(L.m
 window.gtag("js",new Date());
 window.gtag("config",L.measurementId);
 }
+else if(L.type==="clarity"){
+var id=String(L.projectId||"");
+if(!/^[a-z0-9]{7,20}$/i.test(id))return;
+window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments);};
+window.clarity("consentv2",{ad_Storage:st.marketing?"granted":"denied",analytics_Storage:"granted"});
+loadScript("https://www.clarity.ms/tag/"+encodeURIComponent(id),null,null,true);
+}
 }
 function applyMarketing(){
 var urls=C.marketingScripts||[];
@@ -148,10 +215,31 @@ window.dataLayer=window.dataLayer||[];
 window.dataLayer.push({"gtm.start":Date.now(),event:"gtm.js"});
 loadScript("https://www.googletagmanager.com/gtm.js?id="+encodeURIComponent(L.containerId),null,null,true);
 }
+else if(L.type==="uet"){
+var id=String(L.tagId||"");
+if(!/^[0-9]{6,12}$/.test(id))return;
+window.uetq=window.uetq||[];
+window.uetq.push("consent","update",{"ad_storage":"granted"});
+var src="https://bat.bing.com/bat.js";
+if(alreadyScriptSrc(src))return;
+var n=document.createElement("script");
+n.src=src;
+n.async=true;
+n.onload=function(){
+try{
+var q=window.uetq;
+window.uetq=new window.UET({ti:id,enableAutoSpaTracking:false,q:q});
+window.uetq.push("pageLoad");
+}catch(e){}
+};
+document.head.appendChild(n);
+}
 }
 function applyScripts(st){
-if(st.analytics) applyAnalytics();
-if(st.marketing) applyMarketing();
+var eff=effective(st)||st;
+purgeDenied(eff);
+if(eff.analytics) applyAnalytics(eff);
+if(eff.marketing) applyMarketing();
 }
 function gtagUpdate(st){
 if(!C.googleConsentMode||!window.gtag)return;
@@ -171,7 +259,7 @@ fetch(C.recordPath,{
 method:"POST",
 credentials:"same-origin",
 headers:{"Content-Type":"application/json"},
-body:JSON.stringify({policyVersion:C.policyVersion,functional:!!st.functional,analytics:!!st.analytics,marketing:!!st.marketing})
+body:JSON.stringify({policyVersion:C.policyVersion,functional:!!st.functional,analytics:!!st.analytics,marketing:!!st.marketing,gpc:!!st.gpc})
 }).catch(function(){});
 }
 function hide(el){if(el)el.setAttribute("hidden","");el&&(el.style.display="none");}
@@ -221,7 +309,8 @@ else mountLink(box,src,box.getAttribute("data-label")||"",kind);
 });
 }
 function persist(a,m,f,opts){
-var st={v:C.policyVersion,essential:true,functional:!!f,analytics:!!a,marketing:!!m};
+if(gpcOn())m=false;
+var st={v:C.policyVersion,essential:true,functional:!!f,analytics:!!a,marketing:!!m,gpc:gpcOn()};
 writeCookie(JSON.stringify({v:st.v,a:st.analytics?1:0,m:st.marketing?1:0,f:st.functional?1:0}));
 logServer(st);
 gtagUpdate(st);
@@ -335,18 +424,52 @@ ic.appendChild(document.createTextNode("🍪"));
 trigger.appendChild(ic);
 function showTrigger(){trigger.removeAttribute("hidden");}
 function hideTrigger(){trigger.setAttribute("hidden","");}
+function focusables(bar){
+return Array.prototype.filter.call(bar.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]),summary"),function(el){
+return !el.closest("[hidden]");
+});
+}
+function bindDialog(bar,isReopen){
+bar.tabIndex=-1;
+function closeReopen(){
+if(bar.parentNode)bar.parentNode.removeChild(bar);
+showTrigger();
+try{trigger.focus();}catch(e){}
+}
+bar.addEventListener("keydown",function(ev){
+if(ev.key==="Escape"){
+if(!isReopen)return;
+ev.preventDefault();
+closeReopen();
+return;
+}
+if(ev.key!=="Tab")return;
+var nodes=focusables(bar);
+if(!nodes.length){ev.preventDefault();return;}
+var first=nodes[0],last=nodes[nodes.length-1],active=document.activeElement;
+if(ev.shiftKey){
+if(active===first||active===bar){ev.preventDefault();last.focus();}
+}else if(active===last){
+ev.preventDefault();first.focus();
+}
+});
+if(isReopen) bar.__emprivacyClose=closeReopen;
+try{bar.focus();}catch(e){}
+}
 function buildPanel(isReopen,hint){
 var st=parseState(readCookie());
 var aOn=st?!!st.analytics:(C.strictDefaults?false:true);
-var mOn=st?!!st.marketing:(C.strictDefaults?false:true);
+var mOn=gpcOn()?false:(st?!!st.marketing:(C.strictDefaults?false:true));
 var fOn=st?!!st.functional:(C.strictDefaults?false:true);
 if(isReopen) hideTrigger();
 var bar=document.createElement("div");
-bar.className="emprivacy-bar"+(isReopen?" emprivacy-bar--reopen":"");
+bar.className="emprivacy-bar"+(C.bannerPosition==="top"?" emprivacy-bar--top":"")+(isReopen?" emprivacy-bar--reopen":"");
 bar.setAttribute("role","dialog");
 bar.setAttribute("aria-modal",isReopen?"true":"false");
 var title=document.createElement("h2");
+title.id=isReopen?"emprivacy-reopen-title":"emprivacy-banner-title";
 title.className="emprivacy-title";
+bar.setAttribute("aria-labelledby",title.id);
 title.appendChild(document.createTextNode(C.bannerTitle));
 var msg=document.createElement("p");
 msg.className="emprivacy-msg";
@@ -371,6 +494,7 @@ note.appendChild(document.createTextNode(C.ui.essentialNote));
 var fr=mkRow(C.ui.functional,isReopen?"emprivacy-rf":"emprivacy-f",fOn,false);
 var er=mkRow(C.ui.analytics,isReopen?"emprivacy-ra":"emprivacy-a",aOn,false);
 var mr=mkRow(C.ui.marketing,isReopen?"emprivacy-rm":"emprivacy-m",mOn,false);
+if(gpcOn()){mr.box.checked=false;mr.box.disabled=true;}
 opts.appendChild(ess.wrap);
 opts.appendChild(note);
 opts.appendChild(fr.wrap);
@@ -410,14 +534,21 @@ btnClose.type="button";
 btnClose.className="emprivacy-btn";
 btnClose.appendChild(document.createTextNode(C.ui.close));
 btnClose.addEventListener("click",function(){
-if(bar.parentNode)bar.parentNode.removeChild(bar);
-showTrigger();
+if(typeof bar.__emprivacyClose==="function")bar.__emprivacyClose();
 });
 actions.appendChild(btnClose);
 }
 actions.appendChild(btnSave);
 bar.appendChild(title);
 bar.appendChild(msg);
+if(gpcOn()){
+var gpcEl=document.createElement("p");
+gpcEl.className="emprivacy-note";
+gpcEl.id=isReopen?"emprivacy-gpc-reopen":"emprivacy-gpc-note";
+gpcEl.appendChild(document.createTextNode(C.ui.gpcNote||""));
+bar.appendChild(gpcEl);
+bar.setAttribute("aria-describedby",gpcEl.id);
+}
 bar.appendChild(links);
 bar.appendChild(opts);
 bar.appendChild(actions);
@@ -427,7 +558,9 @@ function openReopenPanel(hint){
 if(root.querySelector(".emprivacy-bar--reopen"))return;
 var st=parseState(readCookie());
 if(!st)return;
-root.appendChild(buildPanel(true,hint||""));
+var panel=buildPanel(true,hint||"");
+root.appendChild(panel);
+bindDialog(panel,true);
 }
 openPanel=function(hint){
 var st=parseState(readCookie());
@@ -442,7 +575,7 @@ note.appendChild(document.createTextNode(hint));
 var opts=existing.querySelector(".emprivacy-opts");
 if(opts){opts.insertBefore(note,opts.firstChild);show(opts);}
 }
-try{existing.scrollIntoView({block:"end"});}catch(e){}
+try{existing.scrollIntoView({block:C.bannerPosition==="top"?"start":"end"});}catch(e){}
 }
 }
 };
@@ -466,18 +599,21 @@ openPanel(C.ui.embedNeedConsent);
 }
 wireEmbedButtons();
 if(!needBanner()){
-var st=parseState(readCookie());
+var st=currentState();
 if(st){
 applyScripts(st);
 gtagUpdate(st);
 hydrateEmbeds(st);
-}
+}else purgeDenied(deniedState());
 showTrigger();
 trigger.addEventListener("click",function(){openReopenPanel();});
 installApi();
 return;
 }
-root.appendChild(buildPanel(false,""));
+purgeDenied(deniedState());
+var first=buildPanel(false,"");
+root.appendChild(first);
+bindDialog(first,false);
 trigger.addEventListener("click",function(){openReopenPanel();});
 installApi();
 }
@@ -488,4 +624,12 @@ else mount();
 
 export function buildGoogleConsentHeadScript(): string {
 	return `(function(){window.dataLayer=window.dataLayer||[];function g(){window.dataLayer.push(arguments);}window.gtag=g;g("consent","default",{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","functionality_storage":"denied","security_storage":"granted","personalization_storage":"denied"});})();`;
+}
+
+/** Denied-by-default Microsoft signals. The tag itself loads only after the matching category is allowed. */
+export function buildMicrosoftConsentHeadScript(kind: "clarity" | "uet"): string {
+	if (kind === "clarity") {
+		return `(function(){window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments);};window.clarity("consentv2",{"ad_Storage":"denied","analytics_Storage":"denied"});})();`;
+	}
+	return `(function(){window.uetq=window.uetq||[];window.uetq.push("consent","default",{"ad_storage":"denied"});})();`;
 }

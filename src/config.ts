@@ -5,7 +5,7 @@
  */
 
 import { chromeForLocale, type EmprivacyChromeStrings, type LocaleOverrides, parseLocaleOverrides, parseLocaleOverridesText, resolveBannerCopy } from "./i18n.js";
-import { isFathomId, isGa4Id, isGtmId, isHostname, isUmamiId } from "./ids.js";
+import { isClarityId, isFathomId, isGa4Id, isGtmId, isHostname, isUetId, isUmamiId } from "./ids.js";
 import {
 	DEFAULT_COOKIE_MAX_AGE_DAYS,
 	isSafeHttpsScriptUrl,
@@ -16,7 +16,17 @@ import {
 	parseHostnameAllowlist,
 	parseScriptUrlWithIntegrity,
 } from "./security.js";
-import { DEFAULT_THEME, type EmprivacyTheme, normalizeHexColor, normalizeRadiusPx, parseRadiusInput } from "./theme.js";
+import {
+	DEFAULT_THEME,
+	type EmprivacyTheme,
+	type ThemeChoice,
+	normalizeHexColor,
+	normalizeRadiusPx,
+	normalizeThemeChoice,
+	parseRadiusInput,
+	parseThemeChoice,
+	themeForChoice,
+} from "./theme.js";
 
 export const KV_KEY = "consent:config" as const;
 export const COOKIE_NAME = "emprivacy_cc" as const;
@@ -31,7 +41,9 @@ export type AnalyticsProvider =
 	| "umami"
 	| "simpleanalytics"
 	| "ga4"
-	| "gtm";
+	| "gtm"
+	| "clarity"
+	| "uet";
 
 export type EmbedCategory = "functional" | "marketing";
 
@@ -82,10 +94,16 @@ export interface EmprivacyConfig {
 	gateEmbeds: boolean;
 	/** Hide the first-visit banner on privacy/cookie policy paths */
 	hideBannerOnPolicyPages: boolean;
+	/** Viewport edge for the fixed consent banner. Fragment placement stays `body:end`. */
+	bannerPosition: BannerPosition;
 	defaultLocale: string;
 	localeOverrides: LocaleOverrides;
+	/** `custom` uses `theme`. A profile id replaces `theme` with that profile’s fixed colors. */
+	themeProfile: ThemeChoice;
 	theme: EmprivacyTheme;
 }
+
+export type BannerPosition = "bottom" | "top";
 
 export const DEFAULT_CONFIG: EmprivacyConfig = {
 	bannerTitle: "Cookies & privacy",
@@ -109,8 +127,10 @@ export const DEFAULT_CONFIG: EmprivacyConfig = {
 	embedCategory: "marketing",
 	gateEmbeds: true,
 	hideBannerOnPolicyPages: true,
+	bannerPosition: "bottom",
 	defaultLocale: "en",
 	localeOverrides: {},
+	themeProfile: "slate",
 	theme: { ...DEFAULT_THEME },
 };
 
@@ -124,7 +144,13 @@ const ANALYTICS_PROVIDERS: readonly AnalyticsProvider[] = [
 	"simpleanalytics",
 	"ga4",
 	"gtm",
+	"clarity",
+	"uet",
 ];
+
+export function normalizeBannerPosition(value: unknown): BannerPosition {
+	return value === "top" ? "top" : "bottom";
+}
 
 function hasUnsafeUrlChars(s: string): boolean {
 	return /[\u0000-\u001F\u007F\s]/.test(s);
@@ -325,9 +351,11 @@ export function normalizeConfig(raw: unknown): EmprivacyConfig {
 			typeof o.hideBannerOnPolicyPages === "boolean"
 				? o.hideBannerOnPolicyPages
 				: DEFAULT_CONFIG.hideBannerOnPolicyPages,
+		bannerPosition: normalizeBannerPosition(o.bannerPosition),
 		defaultLocale: typeof o.defaultLocale === "string" && o.defaultLocale ? o.defaultLocale : DEFAULT_CONFIG.defaultLocale,
 		localeOverrides: parseLocaleOverrides(o.localeOverrides),
-		theme: {
+		themeProfile: normalizeThemeChoice(o.themeProfile),
+		theme: themeForChoice(normalizeThemeChoice(o.themeProfile), {
 			bg: normalizeHexColor(typeof themeRaw.bg === "string" ? themeRaw.bg : "", DEFAULT_THEME.bg),
 			text: normalizeHexColor(typeof themeRaw.text === "string" ? themeRaw.text : "", DEFAULT_THEME.text),
 			accent: normalizeHexColor(
@@ -335,7 +363,7 @@ export function normalizeConfig(raw: unknown): EmprivacyConfig {
 				DEFAULT_THEME.accent,
 			),
 			radiusPx: normalizeRadiusPx(themeRaw.radiusPx, DEFAULT_THEME.radiusPx),
-		},
+		}),
 	};
 }
 
@@ -364,6 +392,14 @@ function assertAnalyticsId(provider: AnalyticsProvider, id: string, umamiScriptU
 		if (!isGtmId(t)) throw new Error("Google Tag Manager ID must look like GTM-XXXX.");
 		return;
 	}
+	if (provider === "clarity") {
+		if (!isClarityId(t)) throw new Error("Clarity project ID must be 7–20 letters or digits.");
+		return;
+	}
+	if (provider === "uet") {
+		if (!isUetId(t)) throw new Error("UET tag ID must be 6–12 digits.");
+		return;
+	}
 	if (provider === "simpleanalytics" && t && !isHostname(t)) {
 		throw new Error("Simple Analytics hostname must be a domain like example.com, or empty.");
 	}
@@ -390,6 +426,8 @@ export function assertValidSavedConfig(input: {
 	embedCategory: string;
 	gateEmbeds: boolean;
 	hideBannerOnPolicyPages: boolean;
+	bannerPosition: string;
+	themeProfile: string;
 	defaultLocale: string;
 	localeOverridesText: string;
 	themeBg: string;
@@ -502,23 +540,31 @@ export function assertValidSavedConfig(input: {
 		throw new Error("Default locale must look like en or pt-BR.");
 	}
 
+	const bannerPosition = input.bannerPosition.trim().toLowerCase();
+	if (bannerPosition !== "top" && bannerPosition !== "bottom") {
+		throw new Error("Banner position must be top or bottom.");
+	}
+
 	const localeOverrides = parseLocaleOverridesText(input.localeOverridesText);
 	for (const pack of Object.values(localeOverrides)) {
 		if (pack.bannerTitle !== undefined) assertOptionalLength("Translated banner title", pack.bannerTitle, 120);
 		if (pack.bannerMessage !== undefined) assertOptionalLength("Translated short notice", pack.bannerMessage, 600);
 	}
 
+	const themeProfile = parseThemeChoice(input.themeProfile);
 	const themeBg = input.themeBg.trim() || DEFAULT_THEME.bg;
 	const themeText = input.themeText.trim() || DEFAULT_THEME.text;
 	const themeAccent = input.themeAccent.trim() || DEFAULT_THEME.accent;
-	if (input.themeBg.trim() && !/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(themeBg)) {
-		throw new Error("Banner background must be a hex color like #111111.");
-	}
-	if (input.themeText.trim() && !/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(themeText)) {
-		throw new Error("Banner text color must be a hex color like #eeeeee.");
-	}
-	if (input.themeAccent.trim() && !/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(themeAccent)) {
-		throw new Error("Banner accent color must be a hex color like #3b82f6.");
+	if (themeProfile === "custom") {
+		if (input.themeBg.trim() && !/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(themeBg)) {
+			throw new Error("Banner background must be a hex color like #111111.");
+		}
+		if (input.themeText.trim() && !/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(themeText)) {
+			throw new Error("Banner text color must be a hex color like #eeeeee.");
+		}
+		if (input.themeAccent.trim() && !/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(themeAccent)) {
+			throw new Error("Banner accent color must be a hex color like #3b82f6.");
+		}
 	}
 
 	return normalizeConfig({
@@ -543,14 +589,21 @@ export function assertValidSavedConfig(input: {
 		embedCategory,
 		gateEmbeds: input.gateEmbeds,
 		hideBannerOnPolicyPages: input.hideBannerOnPolicyPages,
+		bannerPosition,
 		defaultLocale,
 		localeOverrides,
-		theme: {
-			bg: themeBg,
-			text: themeText,
-			accent: themeAccent,
-			radiusPx: parseRadiusInput(input.themeRadius, DEFAULT_THEME.radiusPx),
-		},
+		themeProfile,
+		theme: themeForChoice(
+			themeProfile,
+			themeProfile === "custom"
+				? {
+						bg: themeBg,
+						text: themeText,
+						accent: themeAccent,
+						radiusPx: parseRadiusInput(input.themeRadius, DEFAULT_THEME.radiusPx),
+					}
+				: { ...DEFAULT_THEME },
+		),
 	});
 }
 
@@ -560,6 +613,8 @@ export interface ConsentRecordPayload {
 	functional: boolean;
 	analytics: boolean;
 	marketing: boolean;
+	/** Present when the browser's Global Privacy Control signal forced marketing off. */
+	gpc?: boolean;
 }
 
 /** Safe to embed in `<script type="application/json">` (breakout-safe) */
@@ -611,6 +666,7 @@ export interface EmprivacyPublicRuntimeConfig {
 	embedCategory: EmbedCategory;
 	gateEmbeds: boolean;
 	hideBanner: boolean;
+	bannerPosition: BannerPosition;
 	theme: EmprivacyTheme;
 	ui: EmprivacyChromeStrings;
 	loader: import("./vendors.js").AnalyticsLoader;

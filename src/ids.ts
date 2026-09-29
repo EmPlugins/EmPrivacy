@@ -5,6 +5,8 @@ const FATHOM_ID = /^[A-Za-z0-9]{4,32}$/;
 const UMAMI_ID = /^[A-Za-z0-9-]{8,64}$/;
 const GA4_ID = /^G-[A-Z0-9]{4,14}$/;
 const GTM_ID = /^GTM-[A-Z0-9]{4,12}$/;
+const CLARITY_ID = /^[a-z0-9]{7,20}$/i;
+const UET_ID = /^[0-9]{6,12}$/;
 
 export function isHostname(s: string): boolean {
 	const t = s.trim().toLowerCase();
@@ -27,4 +29,12 @@ export function isFathomId(s: string): boolean {
 
 export function isUmamiId(s: string): boolean {
 	return UMAMI_ID.test(s.trim());
+}
+
+export function isClarityId(s: string): boolean {
+	return CLARITY_ID.test(s.trim());
+}
+
+export function isUetId(s: string): boolean {
+	return UET_ID.test(s.trim());
 }
