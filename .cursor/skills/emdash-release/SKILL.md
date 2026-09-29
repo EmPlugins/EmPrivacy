@@ -6,12 +6,15 @@ description: >-
   compat PR, merge the Version Packages PR, and verify npm + GitHub Release
   publish. Use when the user says "update to latest emdash release", "emdash
   compatibility release", "emdash conformance check", or asks to publish an
-  EmPrivacy release after an EmDash upgrade.
+  EmPrivacy release after an EmDash upgrade. For a feature, minor, or patch
+  release that is not an EmDash upgrade, use the feature-release skill.
 ---
 
 # EmDash release workflow (EmPrivacy)
 
 Execute every step. Do not only advise. Do not stop for manual approval — this repo is configured for end-to-end agent publish.
+
+A feature, minor, or patch release of `@emplugins/emprivacy` that does not upgrade EmDash uses [feature-release](../feature-release/SKILL.md). Stop here if that is the request.
 
 Read [`.cursor/emdash-release.json`](../../emdash-release.json) first, then [reference.md](reference.md).
 
@@ -157,24 +160,26 @@ env -u GITHUB_TOKEN gh pr create --base main --head changeset-release/main \
 
 ### 7. Merge Version Packages (publish)
 
-When the Version Packages PR is open and checks are green (or no required checks):
+Merge as soon as the Version Packages PR exists. Do not watch its checks. CI on that PR usually ends as `action_required` because `GITHUB_TOKEN` opened it. `pnpm release:publish` re-runs the test gate.
 
 ```bash
-env -u GITHUB_TOKEN gh pr checks --watch
-env -u GITHUB_TOKEN gh pr merge --squash --auto
+env -u GITHUB_TOKEN gh pr merge <number> --squash
 ```
 
 Merging triggers `.github/workflows/release.yml` → `pnpm release:publish` → npm + GitHub Release (`NPM_TOKEN` repo secret).
 
 ### 8. Verify publish
 
-Poll until done:
+Watch the Release run. Publish succeeded when the log contains `+ @emplugins/emprivacy@<version>` and `New tag: v<version>`.
+
+npm scans the tarball before it is installable. For up to 15 minutes, `npm view` and the registry can still show the previous version or HTTP 404. Poll the exact version; do not republish during that window:
 
 ```bash
 env -u GITHUB_TOKEN gh run list --workflow=release.yml --branch=main --limit 1
 env -u GITHUB_TOKEN gh run watch
-npm view emprivacy version
-env -u GITHUB_TOKEN gh release list --limit 3
+curl -sS -o /dev/null -w "%{http_code}\n" \
+  https://registry.npmjs.org/@emplugins/emprivacy/<version>
+env -u GITHUB_TOKEN gh release view v<version> --json tagName,url,name
 ```
 
 Report:
