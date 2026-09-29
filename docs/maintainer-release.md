@@ -52,6 +52,10 @@ env -u GITHUB_TOKEN gh auth status
 env -u GITHUB_TOKEN gh pr create ...
 ```
 
+### npm auth
+
+Local credentials belong in `~/.npmrc` from `npm login`. Do not create a project `.npmrc` with `_authToken`. `.gitignore` already ignores `.npmrc`, and `scripts/npm-auth-publish.mjs` refuses to publish if one is present. CI reads `NPM_TOKEN` into a temporary user config outside the repo.
+
 ### npm 2FA
 
 - **CI publish** uses `NPM_TOKEN` — no OTP.
