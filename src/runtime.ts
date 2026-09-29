@@ -33,13 +33,17 @@ import { buildBodyBootstrap, buildGoogleConsentHeadScript, buildMicrosoftConsent
 import {
 	assertSameOriginMutation,
 	cookieMaxAgeSeconds,
+	isPublishableCustomScript,
 	rateHourKey,
+	tryConsumeRateSlot,
 } from "./security.js";
 import { buildAnalyticsLoader, buildVendorList } from "./vendors.js";
 import { VERSION } from "./version.js";
 
-/** Soft cap for anonymous consent POSTs per client fingerprint per UTC hour. */
+/** Soft cap for anonymous consent POSTs per trusted client address per UTC hour. */
 const RECORD_RATE_LIMIT = 30;
+/** Site-wide cap so one client cannot fill the consent log in a single hour. */
+const RECORD_GLOBAL_LIMIT = 60;
 const RECORD_LOG_CAP = 500;
 
 const ADMIN_SETTINGS_PATH = "/settings";
@@ -85,13 +89,6 @@ function absolutePolicyHref(stored: string, ctx: PluginContext): string | null {
 	}
 }
 
-function clientFingerKey(request: Request): string {
-	const cf = request.headers.get("cf-connecting-ip")?.trim();
-	const xff = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-	const ua = (request.headers.get("user-agent") ?? "").slice(0, 120);
-	return `${cf || xff || "unknown"}|${ua}`;
-}
-
 async function hashFinger(s: string): Promise<string> {
 	const data = new TextEncoder().encode(`emprivacy-rl:${s}`);
 	const dig = await crypto.subtle.digest("SHA-256", data);
@@ -101,17 +98,12 @@ async function hashFinger(s: string): Promise<string> {
 		.slice(0, 32);
 }
 
-async function allowRecordWrite(ctx: PluginContext, request: Request): Promise<boolean> {
-	const key = `consent:rl:${rateHourKey()}:${await hashFinger(clientFingerKey(request))}`;
-	try {
-		const raw = (await ctx.kv.get(key)) as string | null;
-		const n = raw && /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
-		if (n >= RECORD_RATE_LIMIT) return false;
-		await ctx.kv.set(key, String(n + 1));
-		return true;
-	} catch {
-		return false;
-	}
+async function allowRecordWrite(ctx: RouteContext): Promise<boolean> {
+	const hour = rateHourKey();
+	const ip = ctx.requestMeta?.ip?.trim() ?? "";
+	const bucket = ip ? `ip:${await hashFinger(ip)}` : "untrusted";
+	if (!(await tryConsumeRateSlot(ctx.kv, `consent:rl:${hour}:global`, RECORD_GLOBAL_LIMIT))) return false;
+	return tryConsumeRateSlot(ctx.kv, `consent:rl:${hour}:${bucket}`, RECORD_RATE_LIMIT);
 }
 
 function publicRuntime(
@@ -138,11 +130,14 @@ function publicRuntime(
 		theme: cfg.theme,
 		ui: copy.ui,
 		loader: buildAnalyticsLoader(cfg),
-		marketingScripts: cfg.marketingScriptUrls.map((src) => ({
-			src,
-			integrity: cfg.scriptIntegrity[src] ?? null,
-		})),
+		marketingScripts: cfg.marketingScriptUrls
+			.filter((src) => isPublishableCustomScript(src, cfg.scriptIntegrity[src], cfg.scriptHostAllowlist))
+			.map((src) => ({
+				src,
+				integrity: cfg.scriptIntegrity[src] ?? null,
+			})),
 		scriptHostAllowlist: cfg.scriptHostAllowlist,
+		embedHostAllowlist: cfg.embedHostAllowlist,
 		scriptIntegrity: cfg.scriptIntegrity,
 		cookieMaxAge: cookieMaxAgeSeconds(cfg.cookieMaxAgeDays),
 		vendors: buildVendorList(cfg),
@@ -280,6 +275,9 @@ export function createPlugin() {
 		routes: {
 			admin: {
 				handler: async (ctx: RouteContext) => {
+					if (!ctx.user) {
+						return new Response("unauthorized", { status: 401 });
+					}
 					const interaction = ctx.input as
 						| { type: string; page?: string; action_id?: string; values?: Record<string, unknown> }
 						| undefined;
@@ -311,6 +309,7 @@ export function createPlugin() {
 								analyticsUrlsText: String(v.analytics_urls ?? ""),
 								marketingUrlsText: String(v.marketing_urls ?? ""),
 								scriptHostAllowlistText: String(v.script_host_allowlist ?? ""),
+								embedHostAllowlistText: String(v.embed_host_allowlist ?? ""),
 								cookieMaxAgeDays: String(v.cookie_max_age_days ?? "180"),
 								googleConsentMode: asBool(v.google_cm),
 								logConsentToServer: asBool(v.log_server),
@@ -374,7 +373,7 @@ export function createPlugin() {
 					if (input.policyVersion !== cfg.policyVersion) {
 						return new Response("policy_version_mismatch", { status: 400 });
 					}
-					if (!(await allowRecordWrite(ctx, ctx.request))) {
+					if (!(await allowRecordWrite(ctx))) {
 						return new Response("rate_limited", { status: 429 });
 					}
 					const gpc = input.gpc === true;
@@ -650,7 +649,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 						type: "text_input" as const,
 						action_id: "analytics_urls",
 						label:
-							"Custom analytics script URLs (one https URL per line; optional trailing SRI: … sha384-…)",
+							"Custom analytics script URLs (one https URL per line, SRI required: … sha384-…)",
 						placeholder: "https://cdn.example/a.js sha384-…",
 						multiline: true,
 						initial_value: analyticsText,
@@ -660,7 +659,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 						type: "text_input" as const,
 						action_id: "marketing_urls",
 						label:
-							"Marketing script URLs (one https URL per line; optional trailing SRI: … sha384-…)",
+							"Marketing script URLs (one https URL per line, SRI required: … sha384-…)",
 						placeholder: "https://… (one per line)",
 						multiline: true,
 						initial_value: marketingText,
@@ -669,10 +668,19 @@ async function buildSettingsPage(ctx: PluginContext) {
 						type: "text_input" as const,
 						action_id: "script_host_allowlist",
 						label:
-							"Script host allowlist (optional; one hostname per line). When set, Custom analytics and marketing URLs must match.",
+							"Script host allowlist (required for Custom, Umami, and marketing URLs; one hostname per line)",
 						placeholder: "cdn.example.com\njs.stripe.com",
 						multiline: true,
 						initial_value: cfg.scriptHostAllowlist.join("\n"),
+					},
+					{
+						type: "text_input" as const,
+						action_id: "embed_host_allowlist",
+						label:
+							"Embed link hosts (one hostname per line). Mastodon and link previews become links only when listed. X, Bluesky, Gist, YouTube, and Vimeo stay built in.",
+						placeholder: "mastodon.social\nexample.com",
+						multiline: true,
+						initial_value: cfg.embedHostAllowlist.join("\n"),
 					},
 					{
 						type: "text_input" as const,

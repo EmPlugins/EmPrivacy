@@ -6,6 +6,19 @@
 
 No unreleased changes.
 
+# emprivacy v3.2.0
+
+## Changes
+
+- **Script host allowlist** — Custom, Umami, and marketing script hosts must be listed. An empty list does not load those scripts. Built-in presets (Cloudflare, Plausible, Fathom, Simple Analytics, GA4, GTM, Clarity, UET) are unchanged. Sites that already saved custom or marketing URLs need each hostname on the list before those scripts load again.
+- **Subresource Integrity** — Custom and marketing lines require a `sha256-`, `sha384-`, or `sha512-` hash. A line without one is rejected on save and is not injected. Umami needs an allowlisted host and does not require a hash.
+- **Embed link hosts** — Mastodon and link previews become links only when the hostname is listed. YouTube, Vimeo, X, Bluesky, and GitHub Gist keep their built-in checks. A `data-emprivacy-embed` attribute on the page is not enough to allow an arbitrary URL.
+- **Non-public hosts** — Loopback, private, link-local, and other non-public addresses are rejected for script and embed URLs.
+- **Settings** — Opening or saving EmPrivacy settings requires a signed-in admin.
+- **Consent log** — Anonymous writes use EmDash’s platform client address: about 30 per address per UTC hour, and about 60 per hour for the whole site. Requests with no platform address share one 30/hour bucket. No IP is stored in the consent row.
+- **Embed iframes** — YouTube and Vimeo `sandbox` is unchanged. The iframe `allow` list no longer includes clipboard access.
+- **Publish** — npm credentials are written to a temporary user config outside the repo. A project `.npmrc` is refused at publish time.
+
 # emprivacy v3.1.0
 
 ## Changes

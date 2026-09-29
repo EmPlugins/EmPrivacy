@@ -114,7 +114,7 @@ stop();
 |--------|-------------|
 | Categories | Essential (always on), **Functional**, **Analytics**, **Marketing** |
 | Privacy / cookie links | EmDash **Page** path or `https://` URL; resolved with `ctx.url()` |
-| Analytics presets | Cloudflare Web Analytics, Plausible, Fathom, Umami, Simple Analytics, GA4, **GTM (Marketing)**, **Microsoft Clarity (Analytics)**, **Microsoft UET (Marketing)**, None, Custom `https` URLs (+ optional SRI / host allowlist) |
+| Analytics presets | Cloudflare Web Analytics, Plausible, Fathom, Umami, Simple Analytics, GA4, **GTM (Marketing)**, **Microsoft Clarity (Analytics)**, **Microsoft UET (Marketing)**, None, Custom `https` URLs (SRI and script host allowlist required) |
 | Marketing scripts | Only **https** URLs you list, injected as `<script src>` after marketing consent |
 | Official embeds | Optional placeholders for `@emdash-cms/plugin-embeds` block types; YouTube/Vimeo use allowlisted player URLs (`youtube-nocookie`, `player.vimeo.com`); client re-checks URLs before mount |
 | Re-open preferences | Cookie button (bottom-left); saving reloads so script loading matches the latest choice |

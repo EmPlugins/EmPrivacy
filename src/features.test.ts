@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isPolicyPagePath, jsonForHtmlScript, normalizeConfig } from "./config.js";
+import { createPlugin } from "./runtime.js";
 import { parseLocaleOverridesText, resolveBannerCopy, chromeForLocale } from "./i18n.js";
 import { isSafeHexColor, parseRadiusInput, THEME_PROFILES } from "./theme.js";
 import { buildAnalyticsLoader, buildVendorList } from "./vendors.js";
@@ -78,6 +79,25 @@ describe("vendors", () => {
 		expect(buildAnalyticsLoader(cfg)).toEqual({ type: "cloudflare", token: "secret-token-value" });
 	});
 
+	it("does not publish custom scripts that lack SRI or an allowlist entry", () => {
+		const blocked = normalizeConfig({
+			analyticsProvider: "custom",
+			analyticsScriptUrls: ["https://cdn.example/a.js"],
+			scriptHostAllowlist: [],
+		});
+		expect(buildAnalyticsLoader(blocked)).toEqual({ type: "none" });
+		const allowed = normalizeConfig({
+			analyticsProvider: "custom",
+			analyticsScriptUrls: ["https://cdn.example/a.js"],
+			scriptIntegrity: { "https://cdn.example/a.js": "sha384-abc=" },
+			scriptHostAllowlist: ["cdn.example"],
+		});
+		expect(buildAnalyticsLoader(allowed)).toEqual({
+			type: "custom",
+			scripts: [{ src: "https://cdn.example/a.js", integrity: "sha384-abc=" }],
+		});
+	});
+
 	it("builds a Plausible loader from a hostname only", () => {
 		const cfg = normalizeConfig({ analyticsProvider: "plausible", analyticsId: "example.com" });
 		expect(buildAnalyticsLoader(cfg)).toEqual({
@@ -112,6 +132,23 @@ describe("vendors", () => {
 		expect(buildAnalyticsLoader(normalizeConfig({ analyticsProvider: "uet", analyticsId: "12ab" })).type).toBe(
 			"none",
 		);
+	});
+});
+
+describe("admin route", () => {
+	it("rejects settings reads and saves when no user is signed in", async () => {
+		const plugin = createPlugin() as unknown as {
+			routes: { admin: { handler: (ctx: { user?: { id: string }; input: unknown }) => Promise<unknown> } };
+		};
+		const load = await plugin.routes.admin.handler({
+			input: { type: "page_load", page: "/settings" },
+		});
+		expect(load).toBeInstanceOf(Response);
+		expect((load as Response).status).toBe(401);
+		const save = await plugin.routes.admin.handler({
+			input: { type: "form_submit", action_id: "emprivacy-save", values: {} },
+		});
+		expect((save as Response).status).toBe(401);
 	});
 });
 

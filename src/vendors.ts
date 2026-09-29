@@ -2,6 +2,7 @@
 
 import type { AnalyticsProvider, EmprivacyConfig } from "./config.js";
 import { isClarityId, isFathomId, isGa4Id, isGtmId, isHostname, isUetId, isUmamiId } from "./ids.js";
+import { isPublishableCustomScript, isScriptHostAllowed } from "./security.js";
 
 export type ConsentCategory = "essential" | "functional" | "analytics" | "marketing";
 
@@ -67,16 +68,12 @@ export function buildAnalyticsLoader(cfg: EmprivacyConfig): AnalyticsLoader {
 			return cfg.cloudflareWebAnalyticsToken
 				? { type: "cloudflare", token: cfg.cloudflareWebAnalyticsToken }
 				: { type: "none" };
-		case "custom":
-			return cfg.analyticsScriptUrls.length
-				? {
-						type: "custom",
-						scripts: cfg.analyticsScriptUrls.map((src) => ({
-							src,
-							integrity: cfg.scriptIntegrity[src] ?? null,
-						})),
-					}
-				: { type: "none" };
+		case "custom": {
+			const scripts = cfg.analyticsScriptUrls
+				.filter((src) => isPublishableCustomScript(src, cfg.scriptIntegrity[src], cfg.scriptHostAllowlist))
+				.map((src) => ({ src, integrity: cfg.scriptIntegrity[src] ?? null }));
+			return scripts.length ? { type: "custom", scripts } : { type: "none" };
+		}
 		case "plausible":
 			return isHostname(cfg.analyticsId)
 				? { type: "plausible", src: PLAUSIBLE_SCRIPT, domain: cfg.analyticsId.trim().toLowerCase() }
@@ -86,7 +83,12 @@ export function buildAnalyticsLoader(cfg: EmprivacyConfig): AnalyticsLoader {
 				? { type: "fathom", src: FATHOM_SCRIPT, siteId: cfg.analyticsId.trim() }
 				: { type: "none" };
 		case "umami":
-			return isUmamiId(cfg.analyticsId) && cfg.umamiScriptUrl
+			return isUmamiId(cfg.analyticsId) &&
+				cfg.umamiScriptUrl &&
+				isScriptHostAllowed(cfg.umamiScriptUrl, {
+					allowlist: cfg.scriptHostAllowlist,
+					allowPresets: false,
+				})
 				? { type: "umami", src: cfg.umamiScriptUrl, websiteId: cfg.analyticsId.trim() }
 				: { type: "none" };
 		case "simpleanalytics":

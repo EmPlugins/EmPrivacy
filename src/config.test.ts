@@ -94,9 +94,10 @@ describe("assertValidSavedConfig", () => {
 		cloudflareToken: "",
 		analyticsId: "",
 		umamiScriptUrl: "",
-		analyticsUrlsText: "https://cdn.example/a.js",
+		analyticsUrlsText: "https://cdn.example/a.js sha384-abc123=",
 		marketingUrlsText: "",
-		scriptHostAllowlistText: "",
+		scriptHostAllowlistText: "cdn.example",
+		embedHostAllowlistText: "",
 		cookieMaxAgeDays: "180",
 		googleConsentMode: false,
 		logConsentToServer: false,
@@ -193,7 +194,7 @@ describe("assertValidSavedConfig", () => {
 		expect(() =>
 			assertValidSavedConfig({
 				...base,
-				analyticsUrlsText: "https://cdn.example/a.js\r\nSet-Cookie:x=y",
+				analyticsUrlsText: "https://cdn.example/a.js sha384-abc123=\r\nSet-Cookie:x=y",
 			}),
 		).toThrow(/Invalid analytics script URL/);
 	});
@@ -269,19 +270,45 @@ describe("assertValidSavedConfig", () => {
 		);
 	});
 
-	it("accepts optional SRI and enforces script host allowlist", () => {
+	it("requires SRI and a script host allowlist for custom URLs", () => {
 		const c = assertValidSavedConfig({
 			...base,
 			analyticsUrlsText: "https://cdn.example/a.js sha384-abc123=",
 			scriptHostAllowlistText: "cdn.example",
+			embedHostAllowlistText: "mastodon.social",
 		});
 		expect(c.analyticsScriptUrls).toEqual(["https://cdn.example/a.js"]);
 		expect(c.scriptIntegrity["https://cdn.example/a.js"]).toBe("sha384-abc123=");
+		expect(c.embedHostAllowlist).toEqual(["mastodon.social"]);
 		expect(() =>
 			assertValidSavedConfig({
 				...base,
-				analyticsUrlsText: "https://evil.example/a.js",
+				analyticsUrlsText: "https://evil.example/a.js sha384-abc123=",
 				scriptHostAllowlistText: "cdn.example",
+			}),
+		).toThrow(/allowlist/);
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsUrlsText: "https://cdn.example/a.js",
+				scriptHostAllowlistText: "cdn.example",
+			}),
+		).toThrow(/Integrity/);
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsUrlsText: "https://cdn.example/a.js sha384-abc123=",
+				scriptHostAllowlistText: "",
+			}),
+		).toThrow(/allowlist/);
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsPlatform: "umami",
+				analyticsId: "123e4567-e89b-12d3-a456-426614174000",
+				umamiScriptUrl: "https://cloud.umami.is/script.js",
+				analyticsUrlsText: "",
+				scriptHostAllowlistText: "",
 			}),
 		).toThrow(/allowlist/);
 	});
