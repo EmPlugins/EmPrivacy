@@ -46,13 +46,16 @@ update to latest emdash release
 
 Uses [`.cursor/skills/emdash-release/`](../.cursor/skills/emdash-release/SKILL.md) and [`.cursor/emdash-release.json`](../.cursor/emdash-release.json): conformance → compat PR → Version Packages merge → `pnpm release:publish` (npm + GitHub Release). Details: [maintainer-release.md](./maintainer-release.md).
 
-### Automated feature release (Changesets)
+### Feature, minor, or patch release (agent-driven)
 
-1. On a feature PR, run `pnpm changeset` and commit the generated file under `.changeset/`.
-2. Merge to `main`. GitHub Actions opens a **Version Packages** PR when changesets are pending.
-3. Merge the Version Packages PR. CI runs `pnpm release:publish` and creates a GitHub Release.
+In Cursor, ask to publish a minor (or patch) release. The agent follows [`.cursor/skills/feature-release/`](../.cursor/skills/feature-release/SKILL.md):
 
-Requires **`NPM_TOKEN`** secret on the repo (publish rights for `@emplugins/emprivacy` on the [emplugins](https://www.npmjs.com/org/emplugins) org).
+1. Commit the work plus **one** `.changeset/*.md` file. Leave `package.json` `"version"`, `src/version.ts`, and `CHANGELOG.md` unchanged. Write the maintainer notes in [RELEASE_NOTES.md](./RELEASE_NOTES.md) for the version Changesets will create.
+2. Open a feature PR, squash-merge when its CI is green.
+3. Merge the **Version Packages** PR as soon as it opens. Its own CI often sits at `action_required` (the Release workflow opened it with `GITHUB_TOKEN`). `pnpm release:publish` on `main` is the publish-time test gate.
+4. Treat `+ @emplugins/emprivacy@<version>` in the Release log as a successful publish. The npm registry can 404 that version for several minutes while it scans the tarball. Poll `https://registry.npmjs.org/@emplugins/emprivacy/<version>` for up to 15 minutes. Do not publish again during that window.
+
+Requires **`NPM_TOKEN`** secret on the repo (publish rights for `@emplugins/emprivacy` on the [emplugins](https://www.npmjs.com/org/emplugins) org). Details: [maintainer-release.md](./maintainer-release.md).
 
 ### Local (fallback)
 

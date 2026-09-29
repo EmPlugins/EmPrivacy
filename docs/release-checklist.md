@@ -15,7 +15,7 @@ Used by the EmDash release skill after publish (and for manual verification).
 ## After Version Packages merge
 
 - [ ] [Release workflow](https://github.com/EmPlugins/EmPrivacy/actions/workflows/release.yml) succeeded.
-- [ ] `npm view @emplugins/emprivacy version` shows the new version.
+- [ ] Release log contains `+ @emplugins/emprivacy@<version>`. The registry URL for that exact version may 404 for several minutes while npm scans the tarball; poll it for up to 15 minutes before treating publish as failed.
 - [ ] Package appears under [emplugins packages](https://www.npmjs.com/settings/emplugins/packages).
 - [ ] GitHub Release created for the `v*` tag on [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
 - [ ] `EMDASH_COMPAT.md` / README list the CI-tested EmDash version.

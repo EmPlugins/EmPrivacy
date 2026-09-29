@@ -17,12 +17,23 @@ update to latest emdash release
 
 The agent discovers the latest `emdash`, bumps deps/CI/docs, runs `pnpm emdash:conformance`, opens and merges the compatibility PR, merges the **Version Packages** PR, and verifies npm + GitHub Release. No manual merge gate (`approval.mergeVersionPackagesPr: true`).
 
+## Agent-driven feature releases
+
+Skill: [`.cursor/skills/feature-release/`](../.cursor/skills/feature-release/SKILL.md)
+
+In Cursor, ask to publish a minor or patch release. The agent:
+
+1. Commits features with one changeset. It does **not** bump `package.json`, `src/version.ts`, or `CHANGELOG.md` (a pre-bump plus a changeset skips a version). Maintainer notes go in [RELEASE_NOTES.md](./RELEASE_NOTES.md).
+2. Squash-merges a feature PR after CI is green.
+3. Merges **Version Packages** without waiting on that PR’s checks.
+4. Confirms the Release log line `+ @emplugins/emprivacy@<version>`, then polls the registry until that exact version returns HTTP 200.
+
 ## Overview
 
 | Step | What happens |
 |------|----------------|
 | 1. Changeset on a PR | Describe bump in `.changeset/<slug>.md` |
-| 2. Merge to `main` | Release workflow runs `changesets/action` |
+| 2. Merge to `main` | Release workflow opens Version Packages when a changeset is pending |
 | 3. Version Packages PR | Bumps version + changelog |
 | 4. Merge Version Packages | `release.yml` runs `pnpm release:publish` → npm + GitHub Release |
 
@@ -83,6 +94,21 @@ pnpm emdash:conformance
 
 ## Troubleshooting
 
+### Version Packages CI stuck on action_required
+
+Expected. The Release workflow opens that PR with `GITHUB_TOKEN`, so GitHub does not start its CI until a maintainer approves the run. Merge the PR anyway. `pnpm release:publish` runs typecheck, test, build, `verify:exports`, and audit before `npm publish`.
+
+### npm version 404 after a successful publish
+
+Expected for several minutes, sometimes longer. npm scans the tarball before it is installable. The Release log line `+ @emplugins/emprivacy@<version>` means publish was accepted. Poll:
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" \
+  https://registry.npmjs.org/@emplugins/emprivacy/<version>
+```
+
+Wait up to 15 minutes for `200`. Do not publish the same version again while the scan is pending.
+
 ### Version Packages PR not created
 
 Release may push `changeset-release/main` without opening a PR if Actions cannot create PRs.
@@ -109,9 +135,13 @@ pnpm release:publish
 ### Verify publish
 
 ```bash
-npm view @emplugins/emprivacy version
-env -u GITHUB_TOKEN gh release list --limit 3
+# Release log must contain: + @emplugins/emprivacy@<version>
+curl -sS -o /dev/null -w "%{http_code}\n" \
+  https://registry.npmjs.org/@emplugins/emprivacy/<version>
+env -u GITHUB_TOKEN gh release view v<version> --json tagName,url,name
 ```
+
+`npm view @emplugins/emprivacy version` can keep showing the previous version until the scan finishes. Use the exact-version URL above.
 
 ## npm org credentials (emplugins)
 
@@ -122,4 +152,5 @@ See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) for creating an Automation token 
 - [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) — token + first publish checklist
 - [release-checklist.md](./release-checklist.md)
 - [RELEASES.md](./RELEASES.md) — semver policy
+- [`.cursor/skills/feature-release/`](../.cursor/skills/feature-release/SKILL.md) — agent-driven minor/patch publish
 - [EMDASH_COMPAT.md](../EMDASH_COMPAT.md)
