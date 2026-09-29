@@ -1,7 +1,0 @@
-// oxlint-disable typescript/no-explicit-any
-export function pipe(...pipeline) {
-    return pipeline.reduce(pipeTwo);
-}
-const pipeTwo = (first, second) => {
-    return (input) => first(input).then(second);
-};

@@ -1,3 +1,0 @@
-/** represents a record key */
-export type RecordKey = string;
-export declare const isRecordKey: (input: unknown) => input is RecordKey;

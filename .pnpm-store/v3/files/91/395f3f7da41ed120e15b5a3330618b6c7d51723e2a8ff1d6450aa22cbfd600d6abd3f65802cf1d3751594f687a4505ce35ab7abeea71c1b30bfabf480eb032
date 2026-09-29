@@ -1,4 +1,0 @@
-import { t as VERIFICATION_ERROR_CODES } from "./errors-CI-j3m_y.js";
-import { n as fetchVerifiedResource, t as DEFAULT_FETCH_LIMITS } from "./fetch-C8Kl1l1t.js";
-
-export { DEFAULT_FETCH_LIMITS, VERIFICATION_ERROR_CODES, fetchVerifiedResource };

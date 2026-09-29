@@ -1,2 +1,0 @@
-export declare const isAsciiAlpha: (c: number) => boolean;
-export declare const isAsciiAlphaNum: (c: number) => boolean;
