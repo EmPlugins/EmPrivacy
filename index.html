@@ -1,0 +1,160 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EmPrivacy 3.1.0 — cookie consent for EmDash</title>
+    <meta
+      name="description"
+      content="EmPrivacy 3.1.0 is the open-source native consent plugin for EmDash 1.x. It gates analytics, marketing scripts, and official embeds until the visitor allows them."
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="icon" href="logo.png" type="image/png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="wrap site-header">
+      <a class="brand" href="./">
+        <img src="logo.png" alt="EmPrivacy" width="280" height="72" />
+      </a>
+      <nav class="nav" aria-label="Page">
+        <a href="#why">Why EmPrivacy</a>
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/EmPlugins/EmPrivacy">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="content">
+      <section class="wrap hero">
+        <div>
+          <p class="eyebrow">
+            <span class="pill">Version 3.1.0</span>
+            <span class="pill quiet">EmDash 1.0.1</span>
+            <span class="pill quiet">MIT</span>
+          </p>
+          <h1>The privacy plugin for EmDash&nbsp;1.x.</h1>
+          <p class="lede">
+            EmPrivacy is an open-source native plugin that puts a consent banner on an EmDash site, then loads analytics, marketing scripts, and official embeds only after the visitor allows that category.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="https://www.npmjs.com/package/@emplugins/emprivacy">@emplugins/emprivacy</a>
+            <a class="button secondary" href="https://github.com/EmPlugins/EmPrivacy/blob/main/docs/GETTING_STARTED.md">Getting started</a>
+          </div>
+        </div>
+        <aside class="banner-mock" aria-label="Example of the consent banner">
+          <h2>Cookies and privacy</h2>
+          <p>Essential cookies stay on. Functional, analytics, and marketing stay off until you choose.</p>
+          <div class="mock-actions">
+            <span class="accent">Accept all</span>
+            <span>Reject non-essential</span>
+            <span>Customize</span>
+          </div>
+          <p class="mock-note">Slate theme, pinned to the bottom of the viewport. New installs start here.</p>
+        </aside>
+      </section>
+
+      <section class="wrap" id="why">
+        <h2>Why EmDash 1.x sites should use it</h2>
+        <p class="section-intro">
+          A pasted cookie bar does not know how an EmDash site is built. EmPrivacy 3.1.0 does. It is the consent plugin written for EmDash 1.0.1: one banner, one first-party choice, and script loading that follows that choice.
+        </p>
+        <div class="reasons">
+          <article class="reason">
+            <h3>Native to EmDash 1.0.1</h3>
+            <p>Register <code>emprivacyPlugin()</code> in <code>plugins</code>. The banner is an EmDash page fragment, settings live in the admin, and official embed blocks can be replaced with placeholders. EmDash 0.x is not supported.</p>
+          </article>
+          <article class="reason">
+            <h3>Nothing extra loads first</h3>
+            <p>Analytics and marketing scripts you configure stay out of the page until that category is allowed. YouTube and Vimeo stay placeholders, then mount only from allowlisted player hosts. Other plugins can ask <code>window.emprivacy</code> instead of adding a second banner.</p>
+          </article>
+          <article class="reason">
+            <h3>Your site keeps the choice</h3>
+            <p>Consent is a first-party <code>emprivacy_cc</code> cookie. EmPrivacy is not another vendor in the middle. The package is MIT-licensed source you can read, pin with a semver range, and upgrade on your own schedule.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap" id="features">
+        <h2>What 3.1.0 includes</h2>
+        <p class="section-intro">
+          Categories, presets, and embed gating from earlier releases, plus the 3.1.0 controls for placement, color, Global Privacy Control, cookie cleanup, keyboard use, a consent-log download, and Microsoft tags.
+        </p>
+        <div class="grid">
+          <article class="card">
+            <h3>A banner with a real choice</h3>
+            <p>First visit offers Accept all, Reject non-essential, and Customize. Essential stays on. Functional, Analytics, and Marketing start unchecked when strict defaults are on. A cookie button reopens the panel later. Changing the policy version asks again.</p>
+          </article>
+          <article class="card">
+            <h3>Presets instead of pasted tags</h3>
+            <ul>
+              <li>Analytics: Cloudflare, Plausible, Fathom, Umami, Simple Analytics, GA4, Microsoft Clarity, custom https URLs, or none</li>
+              <li>Marketing: Google Tag Manager, Microsoft UET, and https script URLs you list</li>
+              <li>Optional host allowlist and Subresource Integrity on custom URLs</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Official embeds stay gated</h3>
+            <p>Placeholders can cover EmDash YouTube, Vimeo, X, Bluesky, Mastodon, Gist, and link-preview blocks until Functional or Marketing is allowed. YouTube and Vimeo become allowlisted iframes. Social, Gist, and link previews become https links. Raw iframes you paste yourself are left alone.</p>
+          </article>
+          <article class="card">
+            <h3>Signals before the tag</h3>
+            <p>Optional Google Consent Mode v2 writes denied defaults in the head, then updates them after a choice. Clarity and UET queue a denied signal before those tags load. If the browser sends Global Privacy Control, Marketing stays off, including after Accept all, until the signal is gone.</p>
+          </article>
+          <article class="card">
+            <h3>Placement, language, and theme</h3>
+            <p>Pin the bar to the bottom or the top. Chrome ships for English, German, French, Spanish, Italian, Dutch, Portuguese, and Polish, with optional JSON for the title and message. Profiles are Slate, Paper, Ink, Indigo, and Primer, or custom hex colors. Focus moves into the banner, Tab stays inside it, and Escape closes the reopen panel.</p>
+          </article>
+          <article class="card">
+            <h3>A record and a public API</h3>
+            <p>Settings generate a vendor list for the cookie policy, without tokens. Optional server logging stores the choice, not an IP, and a signed-in admin can download it as CSV. Themes call <code>window.emprivacy.has()</code>, <code>get()</code>, <code>open()</code>, and <code>onChange()</code>. Turning Analytics or Marketing off expires a fixed list of known first-party cookie names for the presets EmPrivacy loads.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap" id="install">
+        <div class="install">
+          <h2>Install on EmDash 1.0.1</h2>
+          <p class="section-intro">Requires EmDash <code>^1.0.1</code> and Node.js <code>&gt;= 22.16</code>. Register it as a native plugin, not a sandboxed one.</p>
+          <pre><code>pnpm add @emplugins/emprivacy@^3.1.0</code></pre>
+          <pre><code>import emdash from "emdash/astro";
+import { emprivacyPlugin } from "@emplugins/emprivacy";
+
+export default defineConfig({
+  integrations: [
+    emdash({
+      plugins: [
+        emprivacyPlugin(),
+      ],
+    }),
+  ],
+});</code></pre>
+          <p>Put EmPrivacy first when other plugins inject analytics in the head. Publish a privacy policy page, then set its path in the admin under the shield, EmPrivacy. Full steps are in the <a href="https://github.com/EmPlugins/EmPrivacy/blob/main/docs/GETTING_STARTED.md">getting started guide</a>.</p>
+        </div>
+      </section>
+
+      <section class="wrap">
+        <div class="fine-print">
+          <h2>What you still handle</h2>
+          <ul>
+            <li>EmPrivacy does not write your privacy policy, cookie policy, or data-processing agreement.</li>
+            <li>It does not scan the theme for tags or iframes you added yourself. Those still load.</li>
+            <li>It does not geo-locate visitors or certify GDPR, CCPA, or CIPA compliance.</li>
+            <li>This software is a technical control. It is not legal advice.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wrap site-footer">
+      <span>EmPrivacy 3.1.0 · MIT License</span>
+      <span>
+        <a href="https://github.com/EmPlugins/EmPrivacy">Source</a>
+        ·
+        <a href="https://www.npmjs.com/package/@emplugins/emprivacy">npm</a>
+      </span>
+    </footer>
+  </body>
+</html>
