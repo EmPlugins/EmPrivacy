@@ -1,5 +1,14 @@
 # emprivacy
 
+## 3.1.0
+
+### Minor Changes
+
+- e7a3b47: Let site managers place the consent banner at the top or bottom of the viewport.
+  
+  Let site managers choose a fixed banner palette. New installs start on Slate. Custom colors open with the palette already in effect.
+- e7a3b47: Honor Global Privacy Control for marketing, clear known first-party cookies when a category is off, make the banner keyboard-usable, let admins download the consent log, and add Microsoft Clarity and UET presets.
+
 ## 3.0.0
 
 ### Major Changes
