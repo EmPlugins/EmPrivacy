@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { AnalyticsProvider, EmprivacyConfig } from "./config.js";
-import { isFathomId, isGa4Id, isGtmId, isHostname, isUmamiId } from "./ids.js";
+import { isClarityId, isFathomId, isGa4Id, isGtmId, isHostname, isUetId, isUmamiId } from "./ids.js";
 
 export type ConsentCategory = "essential" | "functional" | "analytics" | "marketing";
 
@@ -24,13 +24,17 @@ export type AnalyticsLoader =
 	| { type: "simpleanalytics"; src: string }
 	| { type: "ga4"; measurementId: string }
 	/** Loaded only after Marketing consent — GTM can fire advertising tags. */
-	| { type: "gtm"; containerId: string };
+	| { type: "gtm"; containerId: string }
+	/** Loaded only after Analytics consent. Advertising storage follows Marketing. */
+	| { type: "clarity"; projectId: string }
+	/** Loaded only after Marketing consent. */
+	| { type: "uet"; tagId: string };
 
 const PLAUSIBLE_SCRIPT = "https://plausible.io/js/script.js";
 const FATHOM_SCRIPT = "https://cdn.usefathom.com/script.js";
 const SIMPLE_SCRIPT = "https://scripts.simpleanalyticscdn.com/latest.js";
 
-export { isFathomId, isGa4Id, isGtmId, isHostname, isUmamiId } from "./ids.js";
+export { isClarityId, isFathomId, isGa4Id, isGtmId, isHostname, isUetId, isUmamiId } from "./ids.js";
 
 export function analyticsIdLabel(provider: AnalyticsProvider): string {
 	switch (provider) {
@@ -46,6 +50,10 @@ export function analyticsIdLabel(provider: AnalyticsProvider): string {
 			return "GA4 measurement ID (G-…)";
 		case "gtm":
 			return "Google Tag Manager ID (GTM-…)";
+		case "clarity":
+			return "Microsoft Clarity project ID";
+		case "uet":
+			return "Microsoft UET tag ID";
 		default:
 			return "Analytics ID";
 	}
@@ -87,6 +95,12 @@ export function buildAnalyticsLoader(cfg: EmprivacyConfig): AnalyticsLoader {
 			return isGa4Id(cfg.analyticsId) ? { type: "ga4", measurementId: cfg.analyticsId.trim() } : { type: "none" };
 		case "gtm":
 			return isGtmId(cfg.analyticsId) ? { type: "gtm", containerId: cfg.analyticsId.trim() } : { type: "none" };
+		case "clarity":
+			return isClarityId(cfg.analyticsId)
+				? { type: "clarity", projectId: cfg.analyticsId.trim() }
+				: { type: "none" };
+		case "uet":
+			return isUetId(cfg.analyticsId) ? { type: "uet", tagId: cfg.analyticsId.trim() } : { type: "none" };
 		default:
 			return { type: "none" };
 	}
@@ -168,6 +182,24 @@ export function buildVendorList(cfg: EmprivacyConfig): VendorRow[] {
 			purpose:
 				"Loads GTM only after Marketing consent (containers often fire ads/remarketing). You remain responsible for tags inside the container.",
 			policyUrl: "https://policies.google.com/privacy",
+		});
+	} else if (loader.type === "clarity") {
+		rows.push({
+			id: "clarity",
+			name: "Microsoft Clarity",
+			category: "analytics",
+			purpose:
+				"Clarity loads only after Analytics consent. Advertising storage stays denied until Marketing is also allowed. The project ID is not shown here.",
+			policyUrl: "https://www.microsoft.com/privacy",
+		});
+	} else if (loader.type === "uet") {
+		rows.push({
+			id: "uet",
+			name: "Microsoft Advertising (UET)",
+			category: "marketing",
+			purpose:
+				"The UET tag loads only after Marketing consent. Until then, advertising storage stays denied and the tag is not injected.",
+			policyUrl: "https://www.microsoft.com/privacy",
 		});
 	} else if (loader.type === "custom") {
 		for (const [i, script] of loader.scripts.entries()) {

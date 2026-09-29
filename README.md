@@ -87,7 +87,7 @@ The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@empl
 
 5. **Create a Privacy Policy Page** (and optional Cookie Policy Page) in EmDash, then in admin (shield → **EmPrivacy**) set the public path (`/privacy`) or an `https://` URL.
 
-6. Pick an analytics preset (Cloudflare, Plausible, Fathom, Umami, Simple Analytics, GA4, GTM, None, or Custom), optional marketing script URLs, and **Save**.
+6. Pick an analytics preset (Cloudflare, Plausible, Fathom, Umami, Simple Analytics, GA4, GTM, Microsoft Clarity, Microsoft UET, None, or Custom), optional marketing script URLs, and **Save**.
 
 Visitors see a banner on first visit, when **Policy / consent version** changes, or when an older cookie is missing the functional flag (`f`). Existing `{ v, a, m }` cookies are treated as expired so visitors choose the new category.
 
@@ -97,7 +97,8 @@ After the banner script runs:
 
 ```ts
 window.emprivacy.get();
-// { v, essential: true, functional, analytics, marketing } | null
+// { v, essential: true, functional, analytics, marketing, gpc } | null
+// gpc is true when Global Privacy Control forced marketing off
 
 window.emprivacy.has("analytics"); // boolean
 window.emprivacy.open();           // reopen the panel
@@ -113,16 +114,21 @@ stop();
 |--------|-------------|
 | Categories | Essential (always on), **Functional**, **Analytics**, **Marketing** |
 | Privacy / cookie links | EmDash **Page** path or `https://` URL; resolved with `ctx.url()` |
-| Analytics presets | Cloudflare Web Analytics, Plausible, Fathom, Umami, Simple Analytics, GA4, **GTM (Marketing)**, None, Custom `https` URLs (+ optional SRI / host allowlist) |
+| Analytics presets | Cloudflare Web Analytics, Plausible, Fathom, Umami, Simple Analytics, GA4, **GTM (Marketing)**, **Microsoft Clarity (Analytics)**, **Microsoft UET (Marketing)**, None, Custom `https` URLs (+ optional SRI / host allowlist) |
 | Marketing scripts | Only **https** URLs you list, injected as `<script src>` after marketing consent |
 | Official embeds | Optional placeholders for `@emdash-cms/plugin-embeds` block types; YouTube/Vimeo use allowlisted player URLs (`youtube-nocookie`, `player.vimeo.com`); client re-checks URLs before mount |
 | Re-open preferences | Cookie button (bottom-left); saving reloads so script loading matches the latest choice |
 | Consent cookie | `emprivacy_cc` (`path=/`, `SameSite=Lax`, `Secure` on HTTPS, configurable `Max-Age`, default 180 days), JSON `{ v, f, a, m }` |
 | Vendor list | Derived from settings; shown under Customize; JSON at `/_emdash/api/plugins/emprivacy/vendors` (no tokens) |
-| Optional server log | POST `{ policyVersion, functional, analytics, marketing }` to `/_emdash/api/plugins/emprivacy/record` (Origin / Sec-Fetch-Site, rate-limited, no IP) |
+| Optional server log | POST `{ policyVersion, functional, analytics, marketing, gpc }` to `/_emdash/api/plugins/emprivacy/record` (Origin / Sec-Fetch-Site, rate-limited, no IP). Signed-in admins can download `/_emdash/api/plugins/emprivacy/consent-export` as CSV |
+| Global Privacy Control | When `navigator.globalPrivacyControl` is true, Marketing stays off (including Accept all) until the signal is gone. Analytics is unchanged. Visitors can still open preferences |
+| Cookie cleanup | Turning Analytics or Marketing off expires a fixed list of first-party cookie names for the presets EmPrivacy loads. The consent cookie is kept. HttpOnly and third-party cookies cannot be cleared from the page |
+| Keyboard | Focus moves into the banner. Tab stays inside it. Escape closes the reopen panel and returns focus to the cookie button. The first visit stays open until a choice |
 | Google Consent Mode v2 | Optional denied defaults in `<head>` + `gtag('consent','update',…)` including `functionality_storage` |
+| Microsoft consent | Clarity and UET presets queue denied signals in `<head>`. The Clarity tag loads only after Analytics consent; the UET tag loads only after Marketing consent |
 | i18n | Built-in chrome for common locales; optional JSON title/message overrides |
-| Theme | Hex CSS variables (`--emprivacy-bg`, `--emprivacy-text`, `--emprivacy-accent`, `--emprivacy-radius`) |
+| Theme | Starts on the Slate profile. Also Paper, Ink, Indigo, Primer, or custom hex. Custom opens with the colors already in effect. Profiles use fixed colors only |
+| Banner position | Fixed to the bottom (default) or top of the viewport. The fragment still renders at `body:end` |
 
 ## Capabilities
 

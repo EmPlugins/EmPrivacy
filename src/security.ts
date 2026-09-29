@@ -27,6 +27,9 @@ export const PRESET_SCRIPT_HOSTS = new Set([
 	"scripts.simpleanalyticscdn.com",
 	"www.googletagmanager.com",
 	"googletagmanager.com",
+	"www.clarity.ms",
+	"clarity.ms",
+	"bat.bing.com",
 ]);
 
 const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;

@@ -19,6 +19,7 @@ export interface EmprivacyChromeStrings {
 	embedNeedConsent: string;
 	vendorsHeading: string;
 	whatWeUse: string;
+	gpcNote: string;
 }
 
 export interface EmprivacyLocaleCopy {
@@ -50,6 +51,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "To load this embed, allow the matching category in cookie settings.",
 		vendorsHeading: "What this site uses",
 		whatWeUse: "What we use",
+		gpcNote: "Your browser sent Global Privacy Control, so marketing stays off.",
 	},
 	de: {
 		acceptAll: "Alle akzeptieren",
@@ -70,6 +72,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Um diese Einbettung zu laden, erlauben Sie die passende Kategorie in den Cookie-Einstellungen.",
 		vendorsHeading: "Was diese Website verwendet",
 		whatWeUse: "Was wir verwenden",
+		gpcNote: "Ihr Browser sendet Global Privacy Control, daher bleibt Marketing deaktiviert.",
 	},
 	fr: {
 		acceptAll: "Tout accepter",
@@ -90,6 +93,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Pour charger ce contenu, autorisez la catégorie correspondante dans les paramètres des cookies.",
 		vendorsHeading: "Ce que ce site utilise",
 		whatWeUse: "Ce que nous utilisons",
+		gpcNote: "Votre navigateur envoie Global Privacy Control, donc le marketing reste désactivé.",
 	},
 	es: {
 		acceptAll: "Aceptar todo",
@@ -110,6 +114,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Para cargar este contenido, permita la categoría correspondiente en los ajustes de cookies.",
 		vendorsHeading: "Qué usa este sitio",
 		whatWeUse: "Qué usamos",
+		gpcNote: "Su navegador envía Global Privacy Control, así que el marketing permanece desactivado.",
 	},
 	it: {
 		acceptAll: "Accetta tutto",
@@ -130,6 +135,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Per caricare questo contenuto, consenti la categoria corrispondente nelle impostazioni cookie.",
 		vendorsHeading: "Cosa usa questo sito",
 		whatWeUse: "Cosa usiamo",
+		gpcNote: "Il browser invia Global Privacy Control, quindi il marketing resta disattivato.",
 	},
 	nl: {
 		acceptAll: "Alles accepteren",
@@ -150,6 +156,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Om deze embed te laden, sta de bijbehorende categorie toe in de cookie-instellingen.",
 		vendorsHeading: "Wat deze site gebruikt",
 		whatWeUse: "Wat wij gebruiken",
+		gpcNote: "Uw browser stuurt Global Privacy Control, dus marketing blijft uit.",
 	},
 	pt: {
 		acceptAll: "Aceitar tudo",
@@ -170,6 +177,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Para carregar este conteúdo, autorize a categoria correspondente nas definições de cookies.",
 		vendorsHeading: "O que este site usa",
 		whatWeUse: "O que usamos",
+		gpcNote: "O seu navegador enviou Global Privacy Control, por isso o marketing permanece desligado.",
 	},
 	pl: {
 		acceptAll: "Zaakceptuj wszystkie",
@@ -190,6 +198,7 @@ export const CHROME: Record<string, EmprivacyChromeStrings> = {
 		embedNeedConsent: "Aby wczytać tę treść, zezwól na odpowiednią kategorię w ustawieniach plików cookie.",
 		vendorsHeading: "Czego używa ta witryna",
 		whatWeUse: "Czego używamy",
+		gpcNote: "Przeglądarka wysłała Global Privacy Control, więc marketing pozostaje wyłączony.",
 	},
 };
 

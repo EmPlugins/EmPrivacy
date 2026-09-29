@@ -8,6 +8,7 @@ import { VERSION } from "./version.js";
 
 export type {
 	AnalyticsProvider,
+	BannerPosition,
 	ConsentRecordPayload,
 	ConsentState,
 	EmbedCategory,

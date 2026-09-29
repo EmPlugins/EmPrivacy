@@ -7,6 +7,7 @@ import {
 	assertValidSavedConfig,
 	isRootRelativeSitePath,
 	jsonForHtmlScript,
+	normalizeBannerPosition,
 	normalizeConfig,
 	parseUrlList,
 	resolvePolicyHref,
@@ -35,6 +36,13 @@ describe("normalizeConfig", () => {
 		expect(n.analyticsScriptUrls).toEqual([]);
 		expect(n.analyticsProvider).toBe("cloudflare");
 		expect(n.cloudflareWebAnalyticsToken).toBe("");
+		expect(n.bannerPosition).toBe("bottom");
+	});
+
+	it("keeps a top banner and ignores any other position", () => {
+		expect(normalizeConfig({ bannerPosition: "top" }).bannerPosition).toBe("top");
+		expect(normalizeBannerPosition("side")).toBe("bottom");
+		expect(normalizeConfig({ bannerPosition: "left" }).bannerPosition).toBe("bottom");
 	});
 
 	it("merges partial objects", () => {
@@ -95,6 +103,8 @@ describe("assertValidSavedConfig", () => {
 		embedCategory: "marketing",
 		gateEmbeds: true,
 		hideBannerOnPolicyPages: true,
+		bannerPosition: "bottom",
+		themeProfile: "custom",
 		defaultLocale: "en",
 		localeOverridesText: "",
 		themeBg: "",
@@ -105,6 +115,11 @@ describe("assertValidSavedConfig", () => {
 
 	it("accepts valid https URLs for custom analytics", () => {
 		const c = assertValidSavedConfig(base);
+		expect(c.bannerPosition).toBe("bottom");
+		expect(assertValidSavedConfig({ ...base, bannerPosition: "top" }).bannerPosition).toBe("top");
+		expect(() => assertValidSavedConfig({ ...base, bannerPosition: "left" })).toThrow(
+			/Banner position/,
+		);
 		expect(c.analyticsProvider).toBe("custom");
 		expect(c.analyticsScriptUrls).toEqual(["https://cdn.example/a.js"]);
 		expect(c.privacyPolicyUrl).toBe("https://privacy.example/p");
@@ -229,6 +244,31 @@ describe("assertValidSavedConfig", () => {
 		).toThrow(/hex color/);
 	});
 
+	it("uses the profile palette and ignores custom color fields", () => {
+		const c = assertValidSavedConfig({
+			...base,
+			themeProfile: "Ink",
+			themeBg: "expression(alert(1))",
+			themeText: "#ffffff",
+			themeAccent: "#ffffff",
+			themeRadius: "99",
+		});
+		expect(c.themeProfile).toBe("ink");
+		expect(c.theme).toEqual({ bg: "#000000", text: "#ededed", accent: "#0070f3", radiusPx: 8 });
+		const manual = assertValidSavedConfig({
+			...base,
+			themeProfile: "custom",
+			themeBg: "#112233",
+			themeText: "#abcdef",
+			themeAccent: "#3b82f6",
+			themeRadius: "4",
+		});
+		expect(manual.theme).toEqual({ bg: "#112233", text: "#abcdef", accent: "#3b82f6", radiusPx: 4 });
+		expect(() => assertValidSavedConfig({ ...base, themeProfile: "slate;color:red" })).toThrow(
+			/Banner theme/,
+		);
+	});
+
 	it("accepts optional SRI and enforces script host allowlist", () => {
 		const c = assertValidSavedConfig({
 			...base,
@@ -244,6 +284,39 @@ describe("assertValidSavedConfig", () => {
 				scriptHostAllowlistText: "cdn.example",
 			}),
 		).toThrow(/allowlist/);
+	});
+
+	it("accepts Clarity and UET ids and rejects path or script characters", () => {
+		const clarity = assertValidSavedConfig({
+			...base,
+			analyticsPlatform: "clarity",
+			analyticsId: "abcd1234",
+			analyticsUrlsText: "",
+		});
+		expect(clarity.analyticsProvider).toBe("clarity");
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsPlatform: "clarity",
+				analyticsId: "abcd/123",
+				analyticsUrlsText: "",
+			}),
+		).toThrow(/Clarity/);
+		const uet = assertValidSavedConfig({
+			...base,
+			analyticsPlatform: "uet",
+			analyticsId: "12345678",
+			analyticsUrlsText: "",
+		});
+		expect(uet.analyticsId).toBe("12345678");
+		expect(() =>
+			assertValidSavedConfig({
+				...base,
+				analyticsPlatform: "uet",
+				analyticsId: "1234;alert(1)",
+				analyticsUrlsText: "",
+			}),
+		).toThrow(/UET/);
 	});
 
 	it("accepts cookie lifetime within range", () => {

@@ -4,7 +4,19 @@
 
 ## Changes
 
-_(none)_
+No unreleased changes.
+
+# emprivacy v3.1.0
+
+## Changes
+
+- **Banner position** — Admin setting places the fixed consent banner at the bottom (default) or top of the viewport. Markup still renders through `EmDashBodyEnd`.
+- **Banner themes** — New installs use the Slate profile. Admin can choose Paper, Ink, Indigo, Primer, or Custom colors. Custom opens with the colors already in effect. A profile stores that palette’s fixed colors. Custom colors still accept hex only.
+- **Global Privacy Control** — When the browser sets `navigator.globalPrivacyControl`, Marketing stays denied, including after Accept all. The optional server log stores `gpc: true` and `marketing: false`. Analytics is not forced off. No geolocation.
+- **Cookie cleanup** — Denying Analytics or Marketing expires a fixed list of first-party cookie names used by the presets EmPrivacy injects. The consent cookie is not deleted. HttpOnly and third-party cookies are unchanged.
+- **Keyboard** — Focus moves into the banner, Tab stays inside it, and Escape closes the reopen panel. The first visit stays until the visitor chooses.
+- **Consent log download** — Signed-in admins can GET `/_emdash/api/plugins/emprivacy/consent-export` (CSV, no IP). Formula characters in cells are neutralized.
+- **Microsoft presets** — Clarity loads only after Analytics consent (`www.clarity.ms`). UET loads only after Marketing consent (`bat.bing.com`). Both queue a denied consent signal before the tag is injected.
 
 # emprivacy v3.0.0
 
