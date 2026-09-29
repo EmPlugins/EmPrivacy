@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { parseStrictHttpsUrl } from "../security.js";
+
 /**
  * Validate official EmDash embed block payloads and produce a first-party
  * placeholder plan. Never returns a URL we did not construct or allowlist.
@@ -43,23 +45,9 @@ const BSKY_HOSTS = new Set(["bsky.app", "www.bsky.app"]);
 const GIST_HOSTS = new Set(["gist.github.com"]);
 const POSTER_HOSTS = new Set(["i.ytimg.com", "img.youtube.com", "i.vimeocdn.com"]);
 
-function hasUnsafeChars(s: string): boolean {
-	return /[\u0000-\u001F\u007F\s]/.test(s);
-}
-
+/** Same non-public host rules as script URLs. */
 export function parseHttpsUrl(raw: string): URL | null {
-	const t = raw.trim();
-	if (!t || t.length > 2048 || hasUnsafeChars(t)) return null;
-	if (/%0d|%0a|%09|%0b|%0c|%20/i.test(t)) return null;
-	try {
-		const u = new URL(t);
-		if (u.protocol !== "https:") return null;
-		if (u.username || u.password) return null;
-		if (u.hostname === "localhost" || u.hostname.endsWith(".localhost")) return null;
-		return u;
-	} catch {
-		return null;
-	}
+	return parseStrictHttpsUrl(raw);
 }
 
 function hostOf(u: URL): string {

@@ -8,6 +8,7 @@ import { chromeForLocale, type EmprivacyChromeStrings, type LocaleOverrides, par
 import { isClarityId, isFathomId, isGa4Id, isGtmId, isHostname, isUetId, isUmamiId } from "./ids.js";
 import {
 	DEFAULT_COOKIE_MAX_AGE_DAYS,
+	hasSri,
 	isSafeHttpsScriptUrl,
 	isScriptHostAllowed,
 	isValidIntegrity,
@@ -78,10 +79,15 @@ export interface EmprivacyConfig {
 	/** Optional SRI hashes keyed by script src (sha256/384/512-…) */
 	scriptIntegrity: Record<string, string>;
 	/**
-	 * When non-empty, Custom analytics and marketing script hosts must be on this list.
-	 * Preset CDN hosts remain allowed for built-in providers.
+	 * Hostnames allowed for Custom analytics, Umami, and marketing scripts.
+	 * An empty list denies those URLs. Preset CDN hosts stay allowed for built-in providers.
 	 */
 	scriptHostAllowlist: string[];
+	/**
+	 * Hosts that may become https links for Mastodon and link previews.
+	 * X, Bluesky, Gist, YouTube, and Vimeo do not use this list.
+	 */
+	embedHostAllowlist: string[];
 	/** Consent cookie Max-Age in days (1–365, default 180) */
 	cookieMaxAgeDays: number;
 	/** Emit Google Consent Mode v2 defaults (denied) in head; updates after choice */
@@ -121,6 +127,7 @@ export const DEFAULT_CONFIG: EmprivacyConfig = {
 	marketingScriptUrls: [],
 	scriptIntegrity: {},
 	scriptHostAllowlist: [],
+	embedHostAllowlist: [],
 	cookieMaxAgeDays: DEFAULT_COOKIE_MAX_AGE_DAYS,
 	googleConsentMode: false,
 	logConsentToServer: false,
@@ -315,6 +322,13 @@ export function normalizeConfig(raw: unknown): EmprivacyConfig {
 		.map((h) => h.trim().toLowerCase())
 		.filter((h) => isHostname(h))
 		.slice(0, 50);
+	const embedAllowRaw = Array.isArray(o.embedHostAllowlist)
+		? o.embedHostAllowlist.filter((x): x is string => typeof x === "string")
+		: [];
+	const embedHostAllowlist = embedAllowRaw
+		.map((h) => h.trim().toLowerCase())
+		.filter((h) => isHostname(h))
+		.slice(0, 50);
 
 	return {
 		bannerTitle: typeof o.bannerTitle === "string" ? o.bannerTitle : DEFAULT_CONFIG.bannerTitle,
@@ -338,6 +352,7 @@ export function normalizeConfig(raw: unknown): EmprivacyConfig {
 		marketingScriptUrls: marketing,
 		scriptIntegrity,
 		scriptHostAllowlist,
+		embedHostAllowlist,
 		cookieMaxAgeDays: normalizeCookieMaxAgeDays(o.cookieMaxAgeDays, DEFAULT_CONFIG.cookieMaxAgeDays),
 		googleConsentMode:
 			typeof o.googleConsentMode === "boolean" ? o.googleConsentMode : DEFAULT_CONFIG.googleConsentMode,
@@ -379,8 +394,8 @@ function assertAnalyticsId(provider: AnalyticsProvider, id: string, umamiScriptU
 	}
 	if (provider === "umami") {
 		if (!isUmamiId(t)) throw new Error("Umami website ID looks invalid.");
-		if (!isHttpsUrl(umamiScriptUrl)) {
-			throw new Error("Umami requires the https script URL (Cloud or your self-hosted tracker).");
+		if (!isSafeHttpsScriptUrl(umamiScriptUrl)) {
+			throw new Error("Umami requires an https script URL on a public host (Cloud or your self-hosted tracker).");
 		}
 		return;
 	}
@@ -420,6 +435,7 @@ export function assertValidSavedConfig(input: {
 	analyticsUrlsText: string;
 	marketingUrlsText: string;
 	scriptHostAllowlistText: string;
+	embedHostAllowlistText: string;
 	cookieMaxAgeDays: string;
 	googleConsentMode: boolean;
 	logConsentToServer: boolean;
@@ -466,7 +482,7 @@ export function assertValidSavedConfig(input: {
 	}
 
 	const umamiScriptUrl = input.umamiScriptUrl.trim();
-	if (ap === "umami" && umamiScriptUrl && !isHttpsUrl(umamiScriptUrl)) {
+	if (ap === "umami" && umamiScriptUrl && !isSafeHttpsScriptUrl(umamiScriptUrl)) {
 		throw new Error(invalidScriptUrlError("umami", umamiScriptUrl));
 	}
 	if (ap !== "none" && ap !== "custom" && ap !== "cloudflare" && ap !== "simpleanalytics" && ap !== "gtm") {
@@ -478,6 +494,7 @@ export function assertValidSavedConfig(input: {
 	}
 
 	const scriptHostAllowlist = parseHostnameAllowlist(input.scriptHostAllowlistText);
+	const embedHostAllowlist = parseHostnameAllowlist(input.embedHostAllowlistText);
 	const cookieMaxAgeDays = parseCookieMaxAgeDays(input.cookieMaxAgeDays, DEFAULT_COOKIE_MAX_AGE_DAYS);
 	const scriptIntegrity: Record<string, string> = {};
 
@@ -485,8 +502,10 @@ export function assertValidSavedConfig(input: {
 		const { src, integrity } = parseScriptUrlWithIntegrity(line);
 		if (!src || src.length > 2048) throw new Error(invalidScriptUrlError(kind, line));
 		if (!isSafeHttpsScriptUrl(src)) throw new Error(invalidScriptUrlError(kind, src));
-		if (integrity && !isValidIntegrity(integrity)) {
-			throw new Error(`Invalid SRI for ${kind} script (expected sha256-|sha384-|sha512-…).`);
+		if (!hasSri(integrity)) {
+			throw new Error(
+				`${kind} scripts require Subresource Integrity (sha256-, sha384-, or sha512-) after the URL.`,
+			);
 		}
 		if (
 			!isScriptHostAllowed(src, {
@@ -495,7 +514,7 @@ export function assertValidSavedConfig(input: {
 			})
 		) {
 			throw new Error(
-				`${kind} script host is not on the allowlist. Add the hostname or clear the allowlist.`,
+				`${kind} script host is not on the allowlist. Add the hostname under Script host allowlist.`,
 			);
 		}
 		if (integrity) scriptIntegrity[src] = integrity;
@@ -510,7 +529,7 @@ export function assertValidSavedConfig(input: {
 			})
 		) {
 			throw new Error(
-				"Umami script host is not on the allowlist. Add the hostname or clear the allowlist.",
+				"Umami script host is not on the allowlist. Add the hostname under Script host allowlist.",
 			);
 		}
 	}
@@ -583,6 +602,7 @@ export function assertValidSavedConfig(input: {
 		marketingScriptUrls,
 		scriptIntegrity,
 		scriptHostAllowlist,
+		embedHostAllowlist,
 		cookieMaxAgeDays,
 		googleConsentMode: input.googleConsentMode,
 		logConsentToServer: input.logConsentToServer,
@@ -672,6 +692,7 @@ export interface EmprivacyPublicRuntimeConfig {
 	loader: import("./vendors.js").AnalyticsLoader;
 	marketingScripts: { src: string; integrity: string | null }[];
 	scriptHostAllowlist: string[];
+	embedHostAllowlist: string[];
 	scriptIntegrity: Record<string, string>;
 	cookieMaxAge: number;
 	vendors: VendorPublicRow[];

@@ -26,6 +26,19 @@ Stop only if `gh` is not authenticated or `origin` is not `EmPlugins/EmPrivacy`.
 
 `main` is not branch-protected. Still open a feature pull request so CI runs before publish.
 
+## Secrets
+
+Never commit or push a token, auth token, or other credential to GitHub. This includes npm tokens, `_authToken`, `NPM_TOKEN` values, `NODE_AUTH_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN`, personal access tokens, bearer tokens, private keys, `.npmrc`, and `.env`.
+
+Before every `git add`, `git commit`, and `git push`:
+
+1. Stage explicit paths only. Do not run `git add -A` or `git add .`.
+2. Refuse to stage `.npmrc`, `.env`, `.env.*`, `*.pem`, `*.key`, and private key files.
+3. Read the staged diff. If any line assigns a secret (`_authToken=`, `npm_` plus a token, `ghp_`, `github_pat_`, `gho_`, `Bearer `, `BEGIN PRIVATE KEY`, or `NPM_TOKEN=` / `NODE_AUTH_TOKEN=` / `GITHUB_TOKEN=` followed by a value), unstage it and stop. Do not commit. Do not push.
+4. Do not put a secret in a commit message, pull request body, workflow file, or log that will be committed.
+
+Naming `NPM_TOKEN` as the GitHub Actions secret is fine. Pasting its value is not. Publish auth stays in that Actions secret, or in `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
+
 ## Version ownership
 
 Changesets bumps the version when Version Packages merges. The feature commit must not change:
@@ -73,9 +86,11 @@ One paragraph describing what site managers can do after this release.
 
 ### 1. Branch and commit
 
-Branch from `origin/main`. Commit the features, the changeset, docs, and `docs/RELEASE_NOTES.md`.
+Branch from `origin/main`. Commit the features, the changeset, docs, and `docs/RELEASE_NOTES.md`. Run the Secrets check on the staged diff before committing. If it finds a token, do not commit and do not push.
 
 ### 2. Feature pull request
+
+Run the Secrets check on every commit that would be pushed (`git diff origin/main...HEAD`), not only the index. Stop if a token is present.
 
 ```bash
 git push -u origin HEAD
@@ -150,3 +165,4 @@ If the Release job failed before the `+ @emplugins/emprivacy@` line, see [docs/m
 5. Merge Version Packages without waiting on its CI.
 6. Treat a registry 404 as success-plus-scan until 15 minutes after the `+ @emplugins/emprivacy@` log line.
 7. Finish through npm availability and the GitHub Release. Leave Version Packages unmerged only when merge is impossible (permissions or a missing `NPM_TOKEN`).
+8. Never push a token or other credential. No project `.npmrc`. No `git add -A` or `git add .`.

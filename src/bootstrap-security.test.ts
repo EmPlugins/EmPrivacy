@@ -4,6 +4,13 @@ import { describe, expect, it } from "vitest";
 
 import { buildBodyBootstrap, buildMicrosoftConsentHeadScript } from "./public-bootstrap.js";
 import { chromeForLocale } from "./i18n.js";
+import {
+	EMBED_IFRAME_ALLOW,
+	EMBED_IFRAME_SANDBOX,
+	PRESET_SCRIPT_HOSTS,
+	VIMEO_IFRAME,
+	YT_IFRAME,
+} from "./security.js";
 import { DEFAULT_THEME } from "./theme.js";
 
 describe("buildBodyBootstrap security surface", () => {
@@ -27,13 +34,23 @@ describe("buildBodyBootstrap security surface", () => {
 			loader: { type: "none" },
 			marketingScripts: [],
 			scriptHostAllowlist: ["cdn.example"],
+			embedHostAllowlist: ["mastodon.social"],
 			scriptIntegrity: {},
 			cookieMaxAge: 15552000,
 			vendors: [],
 		});
-		expect(code).toContain("youtube-nocookie");
-		expect(code).toContain("allow-presentation");
+		expect(code).toContain(YT_IFRAME.toString());
+		expect(code).toContain(VIMEO_IFRAME.toString());
+		expect(code).toContain(EMBED_IFRAME_SANDBOX);
+		expect(code).toContain(EMBED_IFRAME_ALLOW);
+		expect(code).not.toContain("clipboard-write");
 		expect(code).not.toContain("allow-popups-to-escape-sandbox");
+		expect(code).not.toContain('kind==="linkPreview"');
+		expect(code).toContain("embedHostAllowlist");
+		expect(code).toContain("hostBlocked");
+		for (const host of PRESET_SCRIPT_HOSTS) {
+			expect(code).toContain(JSON.stringify(host));
+		}
 		expect(code).toContain("embedNeedConsent");
 		expect(code).toContain("scriptHostAllowlist");
 		expect(code).toContain("15552000");
@@ -51,6 +68,7 @@ describe("buildBodyBootstrap security surface", () => {
 		expect(code).toContain("https://bat.bing.com/bat.js");
 		expect(code).toContain('"_uetsid"');
 		expect(code).toContain("emprivacy_cc");
+		expect(() => new Function(code)).not.toThrow();
 	});
 
 	it("queues Microsoft consent as denied before a tag can load", () => {

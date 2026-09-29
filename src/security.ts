@@ -5,8 +5,13 @@
  * logic) the public bootstrap. Keep client checks in sync with these helpers.
  */
 
-const YT_IFRAME = /^https:\/\/(?:www\.)?youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}\/?$/;
-const VIMEO_IFRAME = /^https:\/\/player\.vimeo\.com\/video\/\d{6,12}\/?$/;
+export const YT_IFRAME = /^https:\/\/(?:www\.)?youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}\/?$/;
+export const VIMEO_IFRAME = /^https:\/\/player\.vimeo\.com\/video\/\d{6,12}\/?$/;
+
+/** Sandbox and feature policy for YouTube/Vimeo iframes. Kept beside the src regexes. */
+export const EMBED_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-presentation";
+export const EMBED_IFRAME_ALLOW =
+	"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share";
 
 const LINK_HOSTS = new Set([
 	"x.com",
@@ -64,6 +69,90 @@ function hasUnsafeUrlChars(s: string): boolean {
 	return /[\u0000-\u001F\u007F\s]/.test(s);
 }
 
+/**
+ * Browser copy of the non-public host check. `parseStrictHttpsUrl` calls the
+ * same source so the inline bootstrap cannot drift from the server.
+ * Hostnames are whatever `new URL` already normalized (decimal, hex, and
+ * short IPv4 forms become dotted quads; IPv6 keeps brackets).
+ */
+export function hostnameBlockScript(): string {
+	return `function hostBlocked(raw){
+var host=String(raw||"").trim().toLowerCase().replace(/^\\[|\\]$/g,"");
+if(!host)return true;
+if(host==="localhost"||endsWith(host,".localhost")||endsWith(host,".local")||endsWith(host,".internal")||endsWith(host,".arpa"))return true;
+if(host.indexOf(":")>=0)return ipv6Blocked(host);
+if(/^[0-9.]+$/.test(host)){
+var v4=parseV4(host);
+if(v4===null)return true;
+return v4Blocked(v4);
+}
+return false;
+}
+function endsWith(h,s){return h.length>=s.length&&h.slice(h.length-s.length)===s;}
+function parseV4(host){
+var p=host.split(".");
+if(p.length!==4)return null;
+var n=0;
+for(var i=0;i<p.length;i++){
+var part=p[i];
+if(!/^\\d{1,3}$/.test(part))return null;
+if(part.length>1&&part.charAt(0)==="0")return null;
+var v=+part;
+if(v>255)return null;
+n=n*256+v;
+}
+return n>>>0;
+}
+function v4Blocked(n){
+var a=n>>>24;
+var b=(n>>>16)&255;
+if(a===0||a===10||a===127)return true;
+if(a===100&&b>=64&&b<=127)return true;
+if(a===169&&b===254)return true;
+if(a===172&&b>=16&&b<=31)return true;
+if(a===192&&b===168)return true;
+if(a>=224)return true;
+return false;
+}
+function ipv6Blocked(host){
+if(host==="::"||host==="::1")return true;
+var dotted=/^::ffff:(\\d{1,3}(?:\\.\\d{1,3}){3})$/.exec(host);
+if(dotted){
+var d4=parseV4(dotted[1]);
+return d4===null||v4Blocked(d4);
+}
+var mapped=/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+if(mapped){
+var hi=parseInt(mapped[1],16);
+var lo=parseInt(mapped[2],16);
+if(hi>65535||lo>65535)return true;
+return v4Blocked(((hi<<16)|lo)>>>0);
+}
+if(/\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(host))return true;
+var first;
+if(host.slice(0,2)==="::")first=0;
+else{
+var head=host.split(":")[0];
+if(!/^[0-9a-f]{1,4}$/.test(head))return true;
+first=parseInt(head,16);
+}
+if((first&0xfe00)===0xfc00)return true;
+if((first&0xffc0)===0xfe80)return true;
+if((first&0xffc0)===0xfec0)return true;
+if((first&0xff00)===0xff00)return true;
+return false;
+}`;
+}
+
+const hostBlockedImpl = new Function(`${hostnameBlockScript()}\nreturn hostBlocked;`)() as (
+	raw: string,
+) => boolean;
+
+/** True for loopback, private, link-local, shared (CGNAT), and non-global addresses. */
+export function isBlockedHostname(hostname: string): boolean {
+	return hostBlockedImpl(hostname);
+}
+
 export function parseStrictHttpsUrl(raw: string): URL | null {
 	const t = raw.trim();
 	if (!t || t.length > 2048 || hasUnsafeUrlChars(t)) return null;
@@ -72,9 +161,7 @@ export function parseStrictHttpsUrl(raw: string): URL | null {
 		const u = new URL(t);
 		if (u.protocol !== "https:") return null;
 		if (u.username || u.password) return null;
-		const host = u.hostname.toLowerCase();
-		if (host === "localhost" || host.endsWith(".localhost")) return null;
-		if (host === "127.0.0.1" || host === "::1" || host.endsWith(".local")) return null;
+		if (isBlockedHostname(u.hostname)) return null;
 		return u;
 	} catch {
 		return null;
@@ -112,11 +199,12 @@ export function isAllowedIframeSrc(raw: string): boolean {
 }
 
 /**
- * Client hydration for mode=link. Social/Gist/Mastodon path shapes only.
- * For `linkPreview`, pass `kind === "linkPreview"` so any strict https is allowed
- * (server already validated the OG URL when rendering the placeholder).
+ * Client hydration for link-mode embeds.
+ * X, Bluesky, and Gist keep their built-in host and path checks.
+ * Every other host, including Mastodon and link previews, must be on
+ * `embedHostAllowlist`. The DOM `kind` attribute is not permission.
  */
-export function isAllowedHydratedEmbedLink(raw: string, kind?: string): boolean {
+export function isAllowedHydratedEmbedLink(raw: string, embedHostAllowlist: readonly string[] = []): boolean {
 	const u = parseStrictHttpsUrl(raw);
 	if (!u) return false;
 	const host = u.hostname.toLowerCase();
@@ -131,10 +219,7 @@ export function isAllowedHydratedEmbedLink(raw: string, kind?: string): boolean 
 			return /^\/[A-Za-z0-9-]{1,39}\/[a-f0-9]{8,64}\/?$/i.test(u.pathname);
 		}
 	}
-	if (/^\/@[^/]+\/\d+\/?$/.test(u.pathname) || /^\/users\/[^/]+\/statuses\/\d+\/?$/.test(u.pathname)) {
-		return true;
-	}
-	return kind === "linkPreview";
+	return embedHostAllowlist.includes(host);
 }
 
 export function isSafeHttpsScriptUrl(raw: string): boolean {
@@ -153,11 +238,20 @@ export function isScriptHostAllowed(
 	if (!u) return false;
 	const host = u.hostname.toLowerCase();
 	if (opts.allowPresets && PRESET_SCRIPT_HOSTS.has(host)) return true;
-	if (opts.allowlist.length === 0) {
-		// No custom allowlist: custom URLs still must be strict https (admin-trusted).
-		return true;
-	}
 	return opts.allowlist.includes(host);
+}
+
+/** SRI required before a custom or marketing script may load. Empty is not valid. */
+export function hasSri(s: string | null | undefined): s is string {
+	return typeof s === "string" && /^sha(?:256|384|512)-[A-Za-z0-9+/=]+$/.test(s);
+}
+
+export function isPublishableCustomScript(
+	src: string,
+	integrity: string | null | undefined,
+	allowlist: readonly string[],
+): boolean {
+	return hasSri(integrity) && isScriptHostAllowed(src, { allowlist: [...allowlist], allowPresets: false });
 }
 
 /** Optional SRI: `https://cdn.example/a.js sha384-...` or `... integrity=sha384-...`. */
@@ -196,6 +290,40 @@ export function assertSameOriginMutation(request: Request, expectedOrigin: strin
 	if (site === "same-origin") return null;
 	// No Origin and no same-origin Sec-Fetch-Site → reject (blocks classic CSRF / curl abuse).
 	return new Response("forbidden", { status: 403 });
+}
+
+export interface RateLimitKv {
+	getVersioned<T>(key: string): Promise<{ value: T; revision: string } | null>;
+	compareAndSet(
+		key: string,
+		expectedRevision: string | null,
+		value: unknown,
+	): Promise<{ applied: boolean }>;
+}
+
+/**
+ * Compare-and-set increment. Returns false when the bucket is full, the store
+ * errors, or eight conflicts in a row fail to land a write.
+ */
+export async function tryConsumeRateSlot(kv: RateLimitKv, key: string, limit: number): Promise<boolean> {
+	for (let attempt = 0; attempt < 8; attempt++) {
+		let current: { value: unknown; revision: string } | null;
+		try {
+			current = await kv.getVersioned<unknown>(key);
+		} catch {
+			return false;
+		}
+		const raw = current?.value;
+		const n = typeof raw === "string" && /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
+		if (n >= limit) return false;
+		try {
+			const result = await kv.compareAndSet(key, current ? current.revision : null, String(n + 1));
+			if (result.applied) return true;
+		} catch {
+			return false;
+		}
+	}
+	return false;
 }
 
 /** Coarse hour bucket for rate limiting (UTC). */

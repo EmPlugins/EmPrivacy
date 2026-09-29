@@ -52,6 +52,19 @@ command -v jq
 
 Stop only if `gh` is not authenticated or the remote is not `EmPlugins/EmPrivacy`.
 
+## Secrets
+
+Never commit or push a token, auth token, or other credential to GitHub. This includes npm tokens, `_authToken`, `NPM_TOKEN` values, `NODE_AUTH_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN`, personal access tokens, bearer tokens, private keys, `.npmrc`, and `.env`.
+
+Before every `git add`, `git commit`, and `git push`:
+
+1. Stage explicit paths only. Do not run `git add -A` or `git add .`.
+2. Refuse to stage `.npmrc`, `.env`, `.env.*`, `*.pem`, `*.key`, and private key files.
+3. Read the staged diff. If any line assigns a secret (`_authToken=`, `npm_` plus a token, `ghp_`, `github_pat_`, `gho_`, `Bearer `, `BEGIN PRIVATE KEY`, or `NPM_TOKEN=` / `NODE_AUTH_TOKEN=` / `GITHUB_TOKEN=` followed by a value), unstage it and stop. Do not commit. Do not push.
+4. Do not put a secret in a commit message, pull request body, workflow file, or log that will be committed.
+
+Naming `NPM_TOKEN` as the GitHub Actions secret is fine. Pasting its value is not. Publish auth stays in that Actions secret, or in `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
+
 ## Definitions
 
 - **Conforming**: `pnpm emdash:conformance` exits 0 without plugin source fixes → **patch** changeset.
@@ -127,12 +140,16 @@ Test against EmDash <version>.
 
 Use `minor` / `major` when API fixes or peer floor changes require it.
 
+Stage only the files this upgrade changed. Run the Secrets check on the staged diff before committing, and again on `git diff origin/main...HEAD` before pushing. If it finds a token, do not commit and do not push.
+
 ```bash
-git add -A
+git add package.json pnpm-lock.yaml .github/workflows/ci.yml EMDASH_COMPAT.md README.md .changeset/emdash-<version>-compat.md
 git commit -m "chore: test against emdash@<version>"
 git push -u origin HEAD
 env -u GITHUB_TOKEN gh pr create --title "chore: emdash@<version> compatibility" --body "..."
 ```
+
+If conformance required source or peer edits, stage those paths too. Still do not stage `.npmrc`, `.env`, `node_modules`, or `.pnpm-store`.
 
 ### 5. CI and auto-merge compat PR
 
@@ -198,3 +215,4 @@ If publish fails, open a **minimal fix PR from `origin/main`** (typically `packa
 3. Never skip `pnpm emdash:conformance` before the compat PR.
 4. All `publishablePackages` share the same changeset bump type.
 5. Complete through npm + GitHub Release verification — do not leave Version Packages for the user unless merge is impossible (permissions / missing `NPM_TOKEN`).
+6. Never push a token or other credential. No project `.npmrc`. No `git add -A` or `git add .`.

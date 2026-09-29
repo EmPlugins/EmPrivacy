@@ -100,30 +100,30 @@ Scripts for **Analytics** presets load only after **Analytics** consent — exce
 | Microsoft Clarity | Project ID, 7–20 letters or digits | `https://www.clarity.ms/tag/…` after **Analytics** consent. A denied `consentv2` signal is queued in `<head>` first. `ad_Storage` stays denied until Marketing is also allowed. |
 | Microsoft UET | Tag ID, 6–12 digits | `https://bat.bing.com/bat.js` after **Marketing** consent. `ad_storage` defaults to denied in `<head>`. The tag is not injected before that consent. Automatic SPA tracking is off. |
 | None | — | No analytics scripts |
-| Custom | One https script `src` per line (optional trailing SRI) | Those URLs only |
+| Custom | One https script `src` per line, plus SRI (`sha256-`, `sha384-`, or `sha512-`) | Those URLs only, and only if the host is on the script host allowlist |
 
 IDs and URLs are validated on save and again in the browser before inject. Tokens are never shown in the public vendor list.
 
-### Script host allowlist (optional)
+### Script host allowlist
 
-One hostname per line (e.g. `cdn.example.com`). When non-empty, **Custom** analytics, **Umami**, and **Marketing** script hosts must appear on the list. Built-in preset CDNs (Plausible, Fathom, GTM, Clarity, UET, and so on) stay allowed for their presets.
+One hostname per line (e.g. `cdn.example.com`). **Custom** analytics, **Umami**, and **Marketing** script hosts must appear on the list. An empty list does not load those scripts. Built-in preset CDNs (Plausible, Fathom, GTM, Clarity, UET, and so on) stay allowed for their presets.
 
-### Optional Subresource Integrity (SRI)
+### Subresource Integrity (SRI)
 
-Append a hash after the URL on Custom or Marketing lines:
+Custom and marketing lines require a hash after the URL:
 
 ```
 https://cdn.example/a.js sha384-…
 https://cdn.example/b.js integrity=sha256-…
 ```
 
-The browser sets `integrity` + `crossorigin=anonymous` when the hash is valid. Prefer pinning Custom scripts; many preset CDNs do not publish stable hashes.
+The browser sets `integrity` + `crossorigin=anonymous`. A line without a `sha256-`, `sha384-`, or `sha512-` hash is rejected on save and is not injected. Preset CDNs are not pinned this way; many do not publish stable hashes. Umami needs a hostname on the allowlist and does not require SRI.
 
 ---
 
 ## Marketing scripts
 
-One **https** URL per line, `src` only (optional SRI as above). Loaded after **Marketing** consent. Max 50 lines, 2048 characters each. No HTML.
+One **https** URL per line, with SRI as above, and the host on the script host allowlist. Loaded after **Marketing** consent. Max 50 lines, 2048 characters each. No HTML.
 
 ---
 
@@ -141,7 +141,7 @@ Put EmPrivacy **first** in `plugins` if other plugins also inject Google tags.
 
 When on (default), EmPrivacy’s Portable Text components replace YouTube, Vimeo, tweet, Bluesky, Mastodon, Gist, and link-preview blocks with a placeholder until the selected category is allowed.
 
-YouTube / Vimeo become allowlisted iframes (`youtube-nocookie.com`, `player.vimeo.com`). Social posts, Gists, and link previews become **https links** — EmPrivacy will not iframe an arbitrary Mastodon or unknown host.
+YouTube / Vimeo become allowlisted iframes (`youtube-nocookie.com`, `player.vimeo.com`). X, Bluesky, and GitHub Gist posts become **https links** when the URL matches those hosts. Mastodon and link previews become links only when the hostname is on **Embed link hosts**. An empty list leaves those placeholders in place. EmPrivacy will not iframe a Mastodon instance or an unknown host. A `data-emprivacy-embed` value in the page is not enough to allow an arbitrary URL.
 
 This does **not** rewrite raw HTML `<iframe>` tags you paste in the theme or in an HTML block.
 
@@ -198,7 +198,9 @@ When Analytics or Marketing is denied (including the first visit, before a choic
 
 ## Server-side logging
 
-When enabled, each save POSTs `{ policyVersion, functional, analytics, marketing, gpc }` to `/_emdash/api/plugins/emprivacy/record` (same origin, JSON). The handler requires a matching `Origin` **or** `Sec-Fetch-Site: same-origin`, fails closed if storage capacity cannot be checked, and rate-limits anonymous clients (~30/hour fingerprint). No IP is stored in the consent row. If `gpc` is true, the stored `marketing` flag is false. The page shows up to 15 recent rows. Logging stops at 500 rows.
+When enabled, each save POSTs `{ policyVersion, functional, analytics, marketing, gpc }` to `/_emdash/api/plugins/emprivacy/record` (same origin, JSON). The handler requires a matching `Origin` **or** `Sec-Fetch-Site: same-origin`, fails closed if storage capacity cannot be checked, and rate-limits writes. The limit uses EmDash’s platform client address (`requestMeta.ip`), about 30 writes per address per UTC hour, plus about 60 writes per hour for the whole site. Requests with no platform address share one 30/hour bucket. Counters use compare-and-set. No IP is stored in the consent row. If `gpc` is true, the stored `marketing` flag is false. The page shows up to 15 recent rows. Logging stops at 500 rows.
+
+Saving settings requires a signed-in admin. A settings request with no user is rejected.
 
 Signed-in admins (the plugin settings permission) can download those rows as CSV from `/_emdash/api/plugins/emprivacy/consent-export`. The file is `Cache-Control: private, no-store`. It has no IP, user agent, or rate-limit fingerprint. A cell that starts with `=`, `+`, `-`, or `@` is prefixed with `'` so a spreadsheet does not run it as a formula. The route is not public. A request without a signed-in user is rejected.
 
@@ -211,7 +213,7 @@ EmPrivacy injects an **inline** bootstrap via EmDash `page:fragments`. Sites wit
 - `script-src 'unsafe-inline'` (or a hash/nonce of the emitted bootstrap if your host supports it), and
 - `script-src` / `connect-src` / `frame-src` entries for any presets and gated embeds you enable (e.g. `https://plausible.io`, `https://www.clarity.ms`, `https://bat.bing.com`, `https://www.youtube-nocookie.com`, `https://player.vimeo.com`).
 
-YouTube/Vimeo placeholders use a tight iframe `sandbox` (`allow-scripts allow-same-origin allow-presentation`) after consent. Client hydration also re-checks allowlisted `data-src` values so a planted evil URL cannot become an iframe.
+YouTube/Vimeo placeholders use a tight iframe `sandbox` (`allow-scripts allow-same-origin allow-presentation`) after consent. The iframe `allow` list does not include clipboard access. Client hydration re-checks `data-src` against the same YouTube, Vimeo, X, Bluesky, and Gist rules, and against **Embed link hosts** for every other link. A planted URL cannot become an iframe or an off-list link.
 
 A future hashed static bootstrap (no `'unsafe-inline'`) depends on EmDash fragment APIs exposing nonces or external script URLs.
 

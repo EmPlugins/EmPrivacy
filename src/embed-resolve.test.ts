@@ -32,9 +32,12 @@ describe("resolveEmbed", () => {
 		expect(resolveEmbed({ _type: "youtube", id: "https://evil.example/dQw4w9wgXcQ" })).toBeNull();
 	});
 
-	it("rejects http and protocol-relative URLs", () => {
+	it("rejects http, protocol-relative, and private-host URLs", () => {
 		expect(resolveEmbed({ _type: "linkPreview", id: "http://example.com/x" })).toBeNull();
 		expect(resolveEmbed({ _type: "gist", id: "//gist.github.com/a/abcdef12" })).toBeNull();
+		expect(resolveEmbed({ _type: "linkPreview", id: "https://192.168.1.1/admin" })).toBeNull();
+		expect(resolveEmbed({ _type: "mastodon", id: "https://127.0.0.1/@user/12345" })).toBeNull();
+		expect(resolveEmbed({ _type: "linkPreview", id: "https://169.254.169.254/latest" })).toBeNull();
 	});
 
 	it("never iframes a Mastodon URL; only a same parsed https link", () => {

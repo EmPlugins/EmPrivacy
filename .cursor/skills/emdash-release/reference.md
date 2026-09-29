@@ -28,6 +28,8 @@ when the shell env overrides keyring auth.
 1. npmjs.com → Access Tokens → Automation or granular token with publish for **emplugins** / `@emplugins/emprivacy` (see `docs/NPM_ORG_PUBLISH.md`).
 2. Add as repo secret `NPM_TOKEN` on `EmPlugins/EmPrivacy`.
 
+Never write that token into the repo, a project `.npmrc`, a commit, or a pull request. Local login belongs in `~/.npmrc` only.
+
 ## Files touched on every EmDash upgrade
 
 | File | Change |
