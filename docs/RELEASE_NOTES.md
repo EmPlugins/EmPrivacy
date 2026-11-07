@@ -4,6 +4,12 @@
 
 ## Changes
 
+No unreleased changes.
+
+# emprivacy v3.2.1
+
+## Changes
+
 - **EmDash 1.4.0** — CI-tested with EmDash `1.0.1` and `1.4.0`. Peer dependency stays `emdash@^1.0.1`. No plugin API change.
 - **zod 4.6.7** — Runtime dependency updated from 4.6.5 so production audit clears GHSA-mrhx-c7xc-m3w5 (oversized constrained collections).
 - **Policy links on EmDash 1.2+** — Root-relative privacy and cookie policy paths resolve with `ctx.url()`, which follows the configured site origin (site URL setting, then the address the site was set up on). A site that moves domain sees the new origin in those links after the server restarts.
