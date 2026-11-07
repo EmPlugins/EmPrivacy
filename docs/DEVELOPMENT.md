@@ -21,11 +21,11 @@ pnpm run build
 
 ## `pnpm audit` and the Kysely override
 
-`pnpm run audit` runs **`pnpm audit --prod`**, so it reflects **published runtime** dependencies only (currently `zod` 4.6.5).
+`pnpm run audit` runs **`pnpm audit --prod`**, so it reflects **published runtime** dependencies only (currently `zod` 4.6.7).
 
 The full install (including the `emdash` **dev** tree) can report transitive advisories from EmDash’s tooling stack. Those are owned by the site’s EmDash upgrade path, not by EmPrivacy’s published tarball.
 
-**This repository pins Kysely** via `pnpm.overrides` in `package.json` (currently `0.29.6`, aligned with EmDash 1.0.1). Regenerate the lockfile with `pnpm install` after changing overrides.
+**This repository pins Kysely** via `pnpm.overrides` in `package.json` (currently `0.29.6`). EmDash 1.x declares Kysely as `^0.29.0`. Regenerate the lockfile with `pnpm install` after changing overrides.
 
 ## Deprecation warnings you may still see
 

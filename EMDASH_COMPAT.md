@@ -2,9 +2,14 @@
 
 | @emplugins/emprivacy | Min EmDash (peer) | CI-tested EmDash | Notes |
 |----------------------|-------------------|------------------|-------|
-| **3.x** (current) | `^1.0.1` | `1.0.1` | Native plugin (`createPlugin`); register in `plugins: []` for `page:fragments`. EmDash 0.x is not supported. |
+| **3.x** (current) | `^1.0.1` | `1.0.1`, `1.4.0` | Native plugin (`createPlugin`); register in `plugins: []` for `page:fragments`. EmDash 0.x is not supported. CI runs the peer floor and the latest tested release. |
 
 EmPrivacy 2.x was the last release for EmDash 0.38. It is not updated for EmDash 1.0.
+
+On EmDash 1.2 and newer, two host behaviors reach this plugin without an API change:
+
+- `plugin:install` runs once for a plugin registered in `plugins: []`. EmPrivacy writes default settings only when none are stored.
+- `ctx.url()` follows the configured site origin. Root-relative privacy and cookie policy paths in the banner use that origin after the server restarts.
 
 ## When EmDash releases
 
