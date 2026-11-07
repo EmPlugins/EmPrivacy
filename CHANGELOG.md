@@ -1,5 +1,11 @@
 # emprivacy
 
+## 3.2.1
+
+### Patch Changes
+
+- d71fb28: Test against EmDash 1.4.0. Update zod to 4.6.7 so the production audit clears GHSA-mrhx-c7xc-m3w5.
+
 ## 3.2.0
 
 ### Minor Changes
