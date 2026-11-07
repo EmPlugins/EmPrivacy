@@ -27,7 +27,7 @@
 
 ## Requirements
 
-- **EmDash** `^1.0.1` (**tested with `1.0.1`**). EmDash 0.x is not supported.
+- **EmDash** `^1.0.1` (**CI-tested with `1.0.1` and `1.4.0`**). EmDash 0.x is not supported.
 - **Node.js** `>= 22.16` (matches EmDash’s engine requirement).
 - Register as a **native** plugin in **`astro.config`** via `plugins: []` (not `sandboxed: []`). EmPrivacy uses `page:fragments` for the public banner and `componentsEntry` for embed placeholders. See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/) and [Plugin overview](https://docs.emdashcms.com/plugins/overview/).
 
