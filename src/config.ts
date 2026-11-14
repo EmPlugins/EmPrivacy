@@ -32,6 +32,22 @@ import {
 export const KV_KEY = "consent:config" as const;
 export const COOKIE_NAME = "emprivacy_cc" as const;
 export const PLUGIN_ID = "emprivacy" as const;
+export const PLUGIN_DISPLAY_NAME = "EmPrivacy";
+export const PLUGIN_DESCRIPTION = "Cookie consent, gated embeds, and privacy notices";
+
+/**
+ * Admin Plugins-list fields. EmDash 1.5+ shows them. EmDash 1.0.1's
+ * `PluginDescriptor` type does not declare them, and CI still typechecks that
+ * floor, so they are attached after the object is built. Older hosts ignore them.
+ */
+export function withPluginLabel<T extends object>(
+	definition: T,
+): T & { displayName: string; description: string } {
+	return Object.assign(definition, {
+		displayName: PLUGIN_DISPLAY_NAME,
+		description: PLUGIN_DESCRIPTION,
+	});
+}
 
 export type AnalyticsProvider =
 	| "cloudflare"

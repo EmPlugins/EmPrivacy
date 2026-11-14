@@ -21,8 +21,17 @@ const LINK_HOSTS = new Set([
 	"mobile.twitter.com",
 	"bsky.app",
 	"www.bsky.app",
+	"staging.bsky.app",
 	"gist.github.com",
 ]);
+
+/**
+ * Bluesky profile path EmPrivacy will link to. Matches the official embed
+ * block's authority and record-key characters, including `did:plc:` profiles.
+ * Percent-encoding is rejected so a decoded `..` or slash cannot sneak through.
+ */
+export const BSKY_PROFILE_PATH =
+	/^\/profile\/([A-Za-z0-9._:-]{1,512})\/post\/([A-Za-z0-9._:~-]{1,512})\/?$/;
 
 /** Hosts EmPrivacy may load as <script src> for built-in presets. */
 export const PRESET_SCRIPT_HOSTS = new Set([
@@ -212,8 +221,8 @@ export function isAllowedHydratedEmbedLink(raw: string, embedHostAllowlist: read
 		if (host.includes("twitter") || host === "x.com" || host === "www.x.com") {
 			return /\/(?:i\/web\/)?status(?:es)?\/\d{5,20}\/?$/i.test(u.pathname);
 		}
-		if (host.includes("bsky")) {
-			return /^\/profile\/[^/]+\/post\/[^/]+\/?$/.test(u.pathname);
+		if (host === "bsky.app" || host === "www.bsky.app" || host === "staging.bsky.app") {
+			return BSKY_PROFILE_PATH.test(u.pathname);
 		}
 		if (host === "gist.github.com") {
 			return /^\/[A-Za-z0-9-]{1,39}\/[a-f0-9]{8,64}\/?$/i.test(u.pathname);

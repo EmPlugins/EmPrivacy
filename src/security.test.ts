@@ -63,6 +63,14 @@ describe("embed allowlists", () => {
 			isAllowedHydratedEmbedLink("https://bsky.app/profile/a.bsky.social/post/abc123"),
 		).toBe(true);
 		expect(
+			isAllowedHydratedEmbedLink("https://bsky.app/profile/did:plc:abc123/post/3jabcdef"),
+		).toBe(true);
+		expect(
+			isAllowedHydratedEmbedLink("https://staging.bsky.app/profile/alice.test/post/3jabcdef"),
+		).toBe(true);
+		expect(isAllowedHydratedEmbedLink("https://bsky.app/profile/../post/abc")).toBe(false);
+		expect(isAllowedHydratedEmbedLink("https://embed.bsky.app/static/embed.js")).toBe(false);
+		expect(
 			isAllowedHydratedEmbedLink("https://gist.github.com/octocat/abcdef12abcdef12abcdef12abcdef12"),
 		).toBe(true);
 		expect(isAllowedHydratedEmbedLink("https://evil.example/post/1")).toBe(false);

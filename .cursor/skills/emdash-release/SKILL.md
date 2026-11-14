@@ -63,7 +63,9 @@ Before every `git add`, `git commit`, and `git push`:
 3. Read the staged diff. If any line assigns a secret (`_authToken=`, `npm_` plus a token, `ghp_`, `github_pat_`, `gho_`, `Bearer `, `BEGIN PRIVATE KEY`, or `NPM_TOKEN=` / `NODE_AUTH_TOKEN=` / `GITHUB_TOKEN=` followed by a value), unstage it and stop. Do not commit. Do not push.
 4. Do not put a secret in a commit message, pull request body, workflow file, or log that will be committed.
 
-Release publishes with GitHub Actions OIDC. Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to `release.yml`. A local publish uses `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
+Release publishes with GitHub Actions OIDC from `release.yml` (`id-token: write`, npm 11.5.1 or newer). Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to that workflow. A local publish uses `~/.npmrc` from `npm login`. Never write a project `.npmrc`. Setup: [docs/NPM_ORG_PUBLISH.md](../../../docs/NPM_ORG_PUBLISH.md).
+
+Changes to `main` go through a pull request. Do not `git push origin main`.
 
 ## Definitions
 
@@ -162,7 +164,7 @@ If auto-merge is blocked by branch protection, merge when checks are green (`gh 
 
 ### 6. Version Packages PR
 
-After compat merges, wait for `changesets/action` on `main`:
+After the compatibility pull request merges, wait for Release on `main`. That workflow is `scripts/release-or-version.mjs`, not `changesets/action`.
 
 ```bash
 env -u GITHUB_TOKEN gh pr list --search "Version Packages" --state open
@@ -206,7 +208,7 @@ Report:
 - Conforming vs non-conforming + bump type
 - Consumed changesets
 
-If publish fails, open a **minimal fix PR from `origin/main`** (typically `package.json` + `release.yml`), merge it, and re-watch Release. See `docs/maintainer-release.md` and `docs/NPM_ORG_PUBLISH.md`.
+If publish fails, open a minimal fix pull request from `origin/main`, merge it, and re-watch Release. Do not restore `NPM_TOKEN`. See `docs/maintainer-release.md` and `docs/NPM_ORG_PUBLISH.md`.
 
 ## Hard rules
 

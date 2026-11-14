@@ -2,7 +2,7 @@
 
 import type { PluginDescriptor } from "emdash";
 
-import { PLUGIN_ID } from "./config.js";
+import { PLUGIN_ID, withPluginLabel } from "./config.js";
 import { createPlugin } from "./runtime.js";
 import { VERSION } from "./version.js";
 
@@ -44,10 +44,10 @@ export default createPlugin;
  * Do not place this descriptor in `sandboxed: []`.
  */
 export function emprivacyPlugin(): PluginDescriptor {
-	return {
+	return withPluginLabel({
 		id: PLUGIN_ID,
 		version: VERSION,
-		format: "native",
+		format: "native" as const,
 		entrypoint: "@emplugins/emprivacy",
 		componentsEntry: "@emplugins/emprivacy/astro",
 		adminPages: [
@@ -57,5 +57,5 @@ export function emprivacyPlugin(): PluginDescriptor {
 				icon: "shield",
 			},
 		],
-	};
+	});
 }

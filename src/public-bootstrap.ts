@@ -7,6 +7,7 @@ import {
 	EMBED_IFRAME_SANDBOX,
 	hostnameBlockScript,
 	PRESET_SCRIPT_HOSTS,
+	BSKY_PROFILE_PATH,
 	VIMEO_IFRAME,
 	YT_IFRAME,
 } from "./security.js";
@@ -26,6 +27,7 @@ var listeners=[];
 var PRESET_HOSTS=${jsonForHtmlScript(Object.fromEntries([...PRESET_SCRIPT_HOSTS].map((host) => [host, 1])))};
 var YT_IFRAME=${YT_IFRAME.toString()};
 var VIMEO_IFRAME=${VIMEO_IFRAME.toString()};
+var BSKY_PROFILE_PATH=${BSKY_PROFILE_PATH.toString()};
 ${hostnameBlockScript()}
 function readCookie(){
 try{
@@ -149,8 +151,8 @@ var h=u.hostname.toLowerCase();
 if(h==="x.com"||h==="www.x.com"||h==="twitter.com"||h==="www.twitter.com"||h==="mobile.twitter.com"){
 return /\\/(?:i\\/web\\/)?status(?:es)?\\/\\d{5,20}\\/?$/i.test(u.pathname);
 }
-if(h==="bsky.app"||h==="www.bsky.app"){
-return /^\\/profile\\/[^/]+\\/post\\/[^/]+\\/?$/.test(u.pathname);
+if(h==="bsky.app"||h==="www.bsky.app"||h==="staging.bsky.app"){
+return BSKY_PROFILE_PATH.test(u.pathname);
 }
 if(h==="gist.github.com"){
 return /^\\/[A-Za-z0-9-]{1,39}\\/[a-f0-9]{8,64}\\/?$/i.test(u.pathname);

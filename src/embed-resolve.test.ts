@@ -68,4 +68,49 @@ describe("resolveEmbed", () => {
 	it("rejects unknown block types", () => {
 		expect(resolveEmbed({ _type: "html", id: "https://example.com" })).toBeNull();
 	});
+
+	it("canonicalizes Bluesky posts to an https link", () => {
+		expect(
+			resolveEmbed({
+				_type: "bluesky",
+				id: "https://www.bsky.app/profile/alice.bsky.social/post/3jabcdef/?utm=1#x",
+			}),
+		).toEqual({
+			kind: "bluesky",
+			mode: "link",
+			src: "https://bsky.app/profile/alice.bsky.social/post/3jabcdef",
+			label: "Bluesky post",
+			poster: null,
+		});
+		expect(
+			resolveEmbed({
+				_type: "bluesky",
+				id: "at://did:plc:abc123/app.bsky.feed.post/3jabcdef",
+			})?.src,
+		).toBe("https://bsky.app/profile/did:plc:abc123/post/3jabcdef");
+		expect(
+			resolveEmbed({
+				_type: "bluesky",
+				id: "https://bsky.app/profile/did:plc:abc123/post/3jabcdef",
+			})?.src,
+		).toBe("https://bsky.app/profile/did:plc:abc123/post/3jabcdef");
+		expect(
+			resolveEmbed({
+				_type: "bluesky",
+				id: "https://staging.bsky.app/profile/alice.test/post/3jabcdef",
+			})?.src,
+		).toBe("https://staging.bsky.app/profile/alice.test/post/3jabcdef");
+	});
+
+	it("rejects Bluesky targets that are not a post link", () => {
+		expect(resolveEmbed({ _type: "bluesky", id: "https://embed.bsky.app/oembed?url=1" })).toBeNull();
+		expect(resolveEmbed({ _type: "bluesky", id: "https://evil.example/profile/a/post/b" })).toBeNull();
+		expect(
+			resolveEmbed({ _type: "bluesky", id: "at://did:plc:abc123/app.bsky.feed.like/3jabcdef" }),
+		).toBeNull();
+		expect(resolveEmbed({ _type: "bluesky", id: "at://../app.bsky.feed.post/3jabcdef" })).toBeNull();
+		expect(
+			resolveEmbed({ _type: "bluesky", id: "https://bsky.app/profile/../post/3jabcdef" }),
+		).toBeNull();
+	});
 });

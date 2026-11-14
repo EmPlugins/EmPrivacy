@@ -12,8 +12,8 @@ EmPrivacy is a **single-package** repo (`@emplugins/emprivacy` at repo root). Pu
 | Credential | Where | Used for |
 |------------|-------|----------|
 | GitHub CLI (`gh auth login`) | Local machine | Branch, PRs, CI watch, merges |
-| Trusted publisher | npm package settings for `@emplugins/emprivacy` | `release.yml` publishes with GitHub Actions OIDC. Do not set `NPM_TOKEN`. |
-| `GITHUB_TOKEN` | Actions (automatic) | Version PR, changelog, GitHub Release |
+| Trusted publisher | npm package settings for `@emplugins/emprivacy` | `release.yml` on `EmPlugins/EmPrivacy` publishes with OIDC. Direct `npm publish` is allowed. No GitHub environment. |
+| `GITHUB_TOKEN` | Actions (automatic) | Version PR, changelog, GitHub Release. Not an npm credential. |
 
 Always prefer:
 
@@ -25,7 +25,9 @@ when the shell env overrides keyring auth.
 
 ### npm publish auth
 
-`scripts/npm-auth-publish.mjs` publishes from GitHub Actions with OIDC. Do not add an `NPM_TOKEN` secret to the workflow. See `docs/NPM_ORG_PUBLISH.md`.
+`scripts/npm-auth-publish.mjs` publishes from GitHub Actions with OIDC. `release.yml` needs `id-token: write` and npm 11.5.1 or newer from `scripts/ci-toolchain.sh`. Do not add an `NPM_TOKEN` secret to the workflow. `main` accepts changes only through a pull request.
+
+See `docs/NPM_ORG_PUBLISH.md`.
 
 Never write an npm token into the repo, a project `.npmrc`, a commit, or a pull request. Local login belongs in `~/.npmrc` only.
 
@@ -86,5 +88,5 @@ Runs typecheck, test, build, verify:exports, audit, pack:check at `minPeerVersio
 | Conformance filter wrong | `emdash.pluginPackage` must be `@emplugins/emprivacy` |
 | Unexpected major | Stale `.changeset/*.md` |
 | Version Packages PR missing | Create from `changeset-release/main`; fix org Actions → allow PR creation |
-| Publish failed | Check `id-token: write` and `pnpm release:publish`; see `docs/maintainer-release.md` |
+| Publish failed | Check `id-token: write`, npm >= 11.5.1, and `docs/NPM_ORG_PUBLISH.md`. Do not restore `NPM_TOKEN`. |
 | `gh` 401 | `env -u GITHUB_TOKEN gh ...` |

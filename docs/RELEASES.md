@@ -4,7 +4,7 @@
 
 Published **npm** versions of [`@emplugins/emprivacy`](https://www.npmjs.com/package/@emplugins/emprivacy) follow **[Semantic Versioning 2.0.0](https://semver.org/)** (`MAJOR.MINOR.PATCH`).
 
-**Toolchain:** **pnpm** + **[Changesets](https://github.com/changesets/changesets)** + GitHub Actions (`release.yml`). Packages publish to the **[emplugins](https://www.npmjs.com/org/emplugins)** npm org via `pnpm publish`. Source: [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy).
+**Toolchain:** **pnpm** + **[Changesets](https://github.com/changesets/changesets)** + GitHub Actions (`release.yml`). The Release job publishes `@emplugins/emprivacy` to the **[emplugins](https://www.npmjs.com/org/emplugins)** npm org with npm trusted publishing (OIDC). Source: [EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy). Setup: [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md).
 
 ## What each bump means
 
@@ -55,17 +55,17 @@ In Cursor, ask to publish a minor (or patch) release. The agent follows [`.curso
 3. Merge the **Version Packages** PR as soon as it opens. Its own CI often sits at `action_required` (the Release workflow opened it with `GITHUB_TOKEN`). `pnpm release:publish` on `main` is the publish-time test gate.
 4. Treat `+ @emplugins/emprivacy@<version>` in the Release log as a successful publish. The npm registry can 404 that version for several minutes while it scans the tarball. Poll `https://registry.npmjs.org/@emplugins/emprivacy/<version>` for up to 15 minutes. Do not publish again during that window.
 
-Release publishes with npm trusted publishing from `release.yml`. Details: [maintainer-release.md](./maintainer-release.md).
+Release publishes with npm trusted publishing from `release.yml`. `main` accepts that workflow only through a merged pull request. Details: [maintainer-release.md](./maintainer-release.md) and [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md).
 
 ### Local (fallback)
 
 ```bash
+npm login
 pnpm install
-pnpm changeset          # on feature branch
-pnpm changeset version  # on main after merge
-pnpm release:publish    # sync, build, test, verify, audit, publish
-git push --follow-tags
+pnpm release:publish    # sync, build, test, verify, audit, npm publish
 ```
+
+Use this only when Actions cannot publish. npm can prompt for 2FA. The command does not create the GitHub Release.
 
 ## Tags
 

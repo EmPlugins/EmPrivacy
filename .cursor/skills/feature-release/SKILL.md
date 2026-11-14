@@ -24,7 +24,7 @@ Run `gh`, `git commit`, and `git push` outside the sandbox. Commit signing and t
 
 Stop only if `gh` is not authenticated or `origin` is not `EmPlugins/EmPrivacy`.
 
-`main` is not branch-protected. Still open a feature pull request so CI runs before publish.
+`main` accepts changes only through a pull request. Open the pull request and squash-merge it. Do not run `git push origin main`.
 
 ## Secrets
 
@@ -37,7 +37,7 @@ Before every `git add`, `git commit`, and `git push`:
 3. Read the staged diff. If any line assigns a secret (`_authToken=`, `npm_` plus a token, `ghp_`, `github_pat_`, `gho_`, `Bearer `, `BEGIN PRIVATE KEY`, or `NPM_TOKEN=` / `NODE_AUTH_TOKEN=` / `GITHUB_TOKEN=` followed by a value), unstage it and stop. Do not commit. Do not push.
 4. Do not put a secret in a commit message, pull request body, workflow file, or log that will be committed.
 
-Release publishes with GitHub Actions OIDC. Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to `release.yml`. A local publish uses `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
+Release publishes with GitHub Actions OIDC from `release.yml` (`id-token: write`, npm 11.5.1 or newer). Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to that workflow. Do not run `pnpm release:publish` locally. Never write a project `.npmrc`. Setup: [docs/NPM_ORG_PUBLISH.md](../../../docs/NPM_ORG_PUBLISH.md).
 
 ## Version ownership
 
@@ -154,7 +154,7 @@ git pull --ff-only origin main
 
 Report the npm version, the GitHub Release URL, and the feature pull request URL.
 
-If the Release job failed before the `+ @emplugins/emprivacy@` line, see [docs/maintainer-release.md](../../../docs/maintainer-release.md).
+If the Release job failed before the `+ @emplugins/emprivacy@` line, see [docs/maintainer-release.md](../../../docs/maintainer-release.md) and [docs/NPM_ORG_PUBLISH.md](../../../docs/NPM_ORG_PUBLISH.md). Do not add `NPM_TOKEN` back. Check `id-token: write`, npm 11.5.1 or newer, and the trusted publisher workflow filename `release.yml`.
 
 ## Hard rules
 

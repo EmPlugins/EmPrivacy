@@ -141,7 +141,9 @@ Put EmPrivacy **first** in `plugins` if other plugins also inject Google tags.
 
 When on (default), EmPrivacy’s Portable Text components replace YouTube, Vimeo, tweet, Bluesky, Mastodon, Gist, and link-preview blocks with a placeholder until the selected category is allowed.
 
-YouTube / Vimeo become allowlisted iframes (`youtube-nocookie.com`, `player.vimeo.com`). X, Bluesky, and GitHub Gist posts become **https links** when the URL matches those hosts. Mastodon and link previews become links only when the hostname is on **Embed link hosts**. An empty list leaves those placeholders in place. EmPrivacy will not iframe a Mastodon instance or an unknown host. A `data-emprivacy-embed` value in the page is not enough to allow an arbitrary URL.
+YouTube / Vimeo become allowlisted iframes (`youtube-nocookie.com`, `player.vimeo.com`). X, Bluesky, and GitHub Gist posts become **https links** when the URL matches those hosts. Bluesky accepts a `bsky.app` or `staging.bsky.app` profile URL, or an `at://` post URI (`did:plc:` included). After consent the link is the canonical post URL. EmPrivacy does not load `embed.bsky.app`. Mastodon and link previews become links only when the hostname is on **Embed link hosts**. An empty list leaves those placeholders in place. EmPrivacy will not iframe a Mastodon instance or an unknown host. A `data-emprivacy-embed` value in the page is not enough to allow an arbitrary URL.
+
+On EmDash 1.5 and newer, Columns and Cover render nested blocks through plugin components. Register EmPrivacy after the embeds plugin so those nested embeds stay gated. Passing `blockComponents` to the page-level `<PortableText>` does not change that nested render.
 
 This does **not** rewrite raw HTML `<iframe>` tags you paste in the theme or in an HTML block.
 

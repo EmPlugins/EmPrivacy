@@ -48,7 +48,9 @@ Target **EmDash `^1.0.1`** and **Node.js `>= 22.16`**. Package name: **`@emplugi
 
 ## Releases (maintainers)
 
-npm versions use **semver** via Changesets; workflow: [docs/RELEASES.md](./docs/RELEASES.md).
+npm versions use **semver** via Changesets. Release publishes from GitHub Actions with npm trusted publishing (OIDC). Do not add an npm token to the repo or to `release.yml`. Changes to `main` go through a pull request.
+
+Workflow: [docs/RELEASES.md](./docs/RELEASES.md). Publish access: [docs/NPM_ORG_PUBLISH.md](./docs/NPM_ORG_PUBLISH.md).
 
 ## Security
 

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildBodyBootstrap, buildMicrosoftConsentHeadScript } from "./public-bootstrap.js";
 import { chromeForLocale } from "./i18n.js";
 import {
+	BSKY_PROFILE_PATH,
 	EMBED_IFRAME_ALLOW,
 	EMBED_IFRAME_SANDBOX,
 	PRESET_SCRIPT_HOSTS,
@@ -41,6 +42,8 @@ describe("buildBodyBootstrap security surface", () => {
 		});
 		expect(code).toContain(YT_IFRAME.toString());
 		expect(code).toContain(VIMEO_IFRAME.toString());
+		expect(code).toContain(BSKY_PROFILE_PATH.toString());
+		expect(code).toContain('h==="staging.bsky.app"');
 		expect(code).toContain(EMBED_IFRAME_SANDBOX);
 		expect(code).toContain(EMBED_IFRAME_ALLOW);
 		expect(code).not.toContain("clipboard-write");

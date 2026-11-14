@@ -18,6 +18,7 @@ import {
 	KV_KEY,
 	normalizeConfig,
 	PLUGIN_ID,
+	withPluginLabel,
 	type EmprivacyPublicRuntimeConfig,
 	type ConsentRecordPayload,
 	resolvePolicyHref,
@@ -172,7 +173,7 @@ function themeStyle(): string {
 }
 
 export function createPlugin() {
-	return definePlugin({
+	return definePlugin(withPluginLabel({
 		id: PLUGIN_ID,
 		version: VERSION,
 		capabilities: ["hooks.page-fragments:register"],
@@ -445,7 +446,7 @@ export function createPlugin() {
 				},
 			},
 		},
-	});
+	}));
 }
 
 export default createPlugin;
