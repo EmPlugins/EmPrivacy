@@ -10,7 +10,7 @@ Used by the EmDash release skill after publish (and for manual verification).
 - [ ] Version bump matches conforming (**patch**) vs API/peer changes (**minor**/**major**).
 - [ ] CI green on the compatibility PR.
 - [ ] `peerDependencies.emdash` still correct (`^1.0.1`; do not lower the floor to support EmDash 0.x).
-- [ ] `NPM_TOKEN` repo secret can publish `@emplugins/*` under the [emplugins](https://www.npmjs.com/org/emplugins) org.
+- [ ] The npm trusted publisher for `@emplugins/emprivacy` is `EmPlugins/EmPrivacy` workflow `release.yml` with `publish` allowed. Release does not use an `NPM_TOKEN` secret.
 
 ## After Version Packages merge
 

@@ -6,41 +6,22 @@ EmPrivacy publishes as **`@emplugins/emprivacy`** to the [emplugins](https://www
 
 This matches EmPost (`@emplugins/emdash-plugin-md-draft`, etc.).
 
-## One-time npm setup
+## Publish access
 
-1. Sign in to npm as a user who is a **member of [emplugins](https://www.npmjs.com/org/emplugins)** with permission to publish (typically Owner or a role with package publish).
-2. Open [Access Tokens](https://www.npmjs.com/settings/~/tokens) → **Generate New Token**.
-3. Create a **Granular Access Token** (Automation tokens are gone):
-   - **Packages and scopes**: **Read and write**
-   - Select **All packages** (required to *create* a new package like `@emplugins/emprivacy` the first time).  
-     Selecting only existing packages (e.g. EmPost’s) often causes a misleading npm `404` on publish.
-   - **Bypass two-factor authentication**: **checked** (required for CI with account 2FA; npm will warn — that is expected)
-   - Organizations: optional; org access alone does **not** grant publish rights
-4. Copy the token once.
+Release publishes from GitHub Actions with npm trusted publishing. The package already trusts `EmPlugins/EmPrivacy` workflow `release.yml` to run `npm publish`. `release.yml` sets `id-token: write`. `scripts/npm-auth-publish.mjs` does not read `NPM_TOKEN`.
 
-### Optional: confirm locally
+Do not create a granular token that bypasses 2FA, and do not add an `NPM_TOKEN` Actions secret for publish. A local publish uses `npm login`, which stores the session in `~/.npmrc`.
 
 ```bash
-NPM_CONFIG_TOKEN='paste-token-here' npm whoami --registry=https://registry.npmjs.org
+npm trust list @emplugins/emprivacy
 ```
 
-You should see your npm username (must be allowed to publish under **emplugins**).
+The listed publisher must be repository `EmPlugins/EmPrivacy`, file `release.yml`, with permission `publish`.
 
 ## One-time GitHub setup ([EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy))
 
-1. Repo → **Settings** → **Secrets and variables** → **Actions**.
-2. Create or update secret:
-   - Name: `NPM_TOKEN`
-   - Value: the Automation/granular token from above
-
-CLI:
-
-```bash
-env -u GITHUB_TOKEN gh secret set NPM_TOKEN --repo EmPlugins/EmPrivacy
-```
-
-3. (Recommended) Org/repo **Actions** settings: allow GitHub Actions to **create and approve pull requests** so Changesets can open Version Packages PRs automatically.
-4. Do **not** create a custom `GITHUB_TOKEN` secret — Actions provides it automatically.
+1. Org/repo **Actions** settings: allow GitHub Actions to **create and approve pull requests** so Changesets can open Version Packages PRs automatically.
+2. Do **not** create a custom `GITHUB_TOKEN` secret. Actions provides it automatically.
 
 ## After code lands on main
 

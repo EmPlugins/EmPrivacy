@@ -55,7 +55,7 @@ In Cursor, ask to publish a minor (or patch) release. The agent follows [`.curso
 3. Merge the **Version Packages** PR as soon as it opens. Its own CI often sits at `action_required` (the Release workflow opened it with `GITHUB_TOKEN`). `pnpm release:publish` on `main` is the publish-time test gate.
 4. Treat `+ @emplugins/emprivacy@<version>` in the Release log as a successful publish. The npm registry can 404 that version for several minutes while it scans the tarball. Poll `https://registry.npmjs.org/@emplugins/emprivacy/<version>` for up to 15 minutes. Do not publish again during that window.
 
-Requires **`NPM_TOKEN`** secret on the repo (publish rights for `@emplugins/emprivacy` on the [emplugins](https://www.npmjs.com/org/emplugins) org). Details: [maintainer-release.md](./maintainer-release.md).
+Release publishes with npm trusted publishing from `release.yml`. Details: [maintainer-release.md](./maintainer-release.md).
 
 ### Local (fallback)
 

@@ -12,7 +12,7 @@ EmPrivacy is a **single-package** repo (`@emplugins/emprivacy` at repo root). Pu
 | Credential | Where | Used for |
 |------------|-------|----------|
 | GitHub CLI (`gh auth login`) | Local machine | Branch, PRs, CI watch, merges |
-| `NPM_TOKEN` | GitHub repo secret on `EmPlugins/EmPrivacy` | `release.yml` → publish `@emplugins/emprivacy` (emplugins org) |
+| Trusted publisher | npm package settings for `@emplugins/emprivacy` | `release.yml` publishes with GitHub Actions OIDC. Do not set `NPM_TOKEN`. |
 | `GITHUB_TOKEN` | Actions (automatic) | Version PR, changelog, GitHub Release |
 
 Always prefer:
@@ -23,12 +23,11 @@ env -u GITHUB_TOKEN gh ...
 
 when the shell env overrides keyring auth.
 
-### One-time npm token
+### npm publish auth
 
-1. npmjs.com → Access Tokens → Automation or granular token with publish for **emplugins** / `@emplugins/emprivacy` (see `docs/NPM_ORG_PUBLISH.md`).
-2. Add as repo secret `NPM_TOKEN` on `EmPlugins/EmPrivacy`.
+`scripts/npm-auth-publish.mjs` publishes from GitHub Actions with OIDC. Do not add an `NPM_TOKEN` secret to the workflow. See `docs/NPM_ORG_PUBLISH.md`.
 
-Never write that token into the repo, a project `.npmrc`, a commit, or a pull request. Local login belongs in `~/.npmrc` only.
+Never write an npm token into the repo, a project `.npmrc`, a commit, or a pull request. Local login belongs in `~/.npmrc` only.
 
 ## Files touched on every EmDash upgrade
 
@@ -87,5 +86,5 @@ Runs typecheck, test, build, verify:exports, audit, pack:check at `minPeerVersio
 | Conformance filter wrong | `emdash.pluginPackage` must be `@emplugins/emprivacy` |
 | Unexpected major | Stale `.changeset/*.md` |
 | Version Packages PR missing | Create from `changeset-release/main`; fix org Actions → allow PR creation |
-| Publish failed | Check `NPM_TOKEN`, `pnpm release:publish`; see `docs/maintainer-release.md` |
+| Publish failed | Check `id-token: write` and `pnpm release:publish`; see `docs/maintainer-release.md` |
 | `gh` 401 | `env -u GITHUB_TOKEN gh ...` |
