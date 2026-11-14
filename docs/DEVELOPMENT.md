@@ -30,3 +30,7 @@ The full install (including the `emdash` **dev** tree) can report transitive adv
 ## Deprecation warnings you may still see
 
 `pnpm install` can still print **deprecated** messages for **transitive** packages **not** maintained by this repo (for example native-addon helpers under EmDash’s SQLite stack). Those warnings do not imply that EmPrivacy’s own source is outdated; they track **upstream** `emdash` and its dependencies.
+
+## Publishing
+
+Maintainers publish `@emplugins/emprivacy` from the Release workflow with npm trusted publishing. See [NPM_ORG_PUBLISH.md](NPM_ORG_PUBLISH.md). Do not add an npm token to the repository.

@@ -66,8 +66,8 @@ Do **not** put it in `sandboxed: []`.
 | Goal | Where to put `emprivacyPlugin()` |
 |------|----------------------------------|
 | Google Consent Mode before other head tags | **First** in `plugins` |
-| Automatic placeholders for `@emdash-cms/plugin-embeds` | **After** the embeds plugin (last wins) |
-| Both | First in `plugins`, and pass `@emplugins/emprivacy/astro` `blockComponents` into `<PortableText />` (site components always win) |
+| Automatic placeholders, including embeds inside Columns and Cover on EmDash 1.5+ | **After** `@emdash-cms/plugin-embeds` (last wins) |
+| Consent Mode first, and gated embeds only in the field you render | First in `plugins`, and pass `@emplugins/emprivacy/astro` `blockComponents` into that `<PortableText />`. This does not cover embeds nested in Columns or Cover |
 
 ---
 
@@ -135,7 +135,7 @@ Do not read `emprivacy_cc` yourself. The JSON shape can change with a major rele
 |--------|----------------|
 | Nothing appears | Layout missing head/body components; plugin not in `plugins: []`; server not restarted |
 | Scripts load before consent | Theme still contains tracker snippets; another plugin is listed **before** EmPrivacy and injects tags immediately |
-| YouTube still loads immediately | Embeds plugin is registered **after** EmPrivacy, so its renderers win. Move EmPrivacy last or pass `blockComponents` on `PortableText`. |
+| YouTube still loads immediately | The embeds plugin is registered **after** EmPrivacy, so its renderers win. On EmDash 1.5+, the same is true inside Columns and Cover, and a page-level `components` prop does not change those. Move EmPrivacy last. |
 | Embeds stay blocked after accept | Category is Marketing but you only enabled Functional (or the reverse). |
 | Save fails on policy URL | Must be `/path` or `https://…` |
 | Save fails on analytics ID | Plausible wants `example.com` (no scheme). GA4 wants `G-…`. GTM wants `GTM-…`. Clarity wants a 7–20 character project ID. UET wants 6–12 digits. Umami needs an https script URL. |

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { parseStrictHttpsUrl } from "../security.js";
+import { BSKY_PROFILE_PATH, parseStrictHttpsUrl } from "../security.js";
 
 /**
  * Validate official EmDash embed block payloads and produce a first-party
@@ -33,15 +33,17 @@ export interface ResolvedEmbed {
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
 const VIMEO_ID = /^\d{6,12}$/;
 const TWEET_ID = /^\d{5,20}$/;
-const BSKY_RKEY = /^[a-z0-9]{1,32}$/i;
-const BSKY_HANDLE = /^[a-z0-9.-]{1,253}$/i;
+const BSKY_AUTHORITY = /^[A-Za-z0-9._:-]{1,512}$/;
+const BSKY_RKEY = /^[A-Za-z0-9._:~-]{1,512}$/;
+/** `at://<authority>/app.bsky.feed.post/<rkey>` */
+const AT_URI_POST = /^at:\/\/([A-Za-z0-9._:-]{1,512})\/app\.bsky\.feed\.post\/([A-Za-z0-9._:~-]{1,512})$/;
 const GIST_ID = /^[a-f0-9]{8,64}$/i;
 const GIST_USER = /^[A-Za-z0-9-]{1,39}$/;
 
 const YT_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com", "youtube-nocookie.com"]);
 const VIMEO_HOSTS = new Set(["vimeo.com", "www.vimeo.com", "player.vimeo.com"]);
 const TWEET_HOSTS = new Set(["twitter.com", "www.twitter.com", "x.com", "www.x.com", "mobile.twitter.com"]);
-const BSKY_HOSTS = new Set(["bsky.app", "www.bsky.app"]);
+const BSKY_HOSTS = new Set(["bsky.app", "www.bsky.app", "staging.bsky.app"]);
 const GIST_HOSTS = new Set(["gist.github.com"]);
 const POSTER_HOSTS = new Set(["i.ytimg.com", "img.youtube.com", "i.vimeocdn.com"]);
 
@@ -103,15 +105,34 @@ function tweetId(raw: string): string | null {
 	return m?.[1] ?? null;
 }
 
+function safeBlueskySegment(value: string, pattern: RegExp): boolean {
+	if (!pattern.test(value)) return false;
+	if (value === "." || value === ".." || value.includes("..")) return false;
+	return true;
+}
+
+/** Canonical https post URL. Never an `embed.bsky.app` script or iframe. */
+function blueskyCanonical(
+	host: "bsky.app" | "staging.bsky.app",
+	authority: string,
+	rkey: string,
+): string | null {
+	if (!safeBlueskySegment(authority, BSKY_AUTHORITY) || !safeBlueskySegment(rkey, BSKY_RKEY)) return null;
+	return `https://${host}/profile/${authority}/post/${rkey}`;
+}
+
 function blueskyHref(raw: string): string | null {
-	const u = parseHttpsUrl(raw);
+	const t = raw.trim();
+	if (!t || t.length > 2048) return null;
+	const at = AT_URI_POST.exec(t);
+	if (at) return blueskyCanonical("bsky.app", at[1] ?? "", at[2] ?? "");
+
+	const u = parseHttpsUrl(t);
 	if (!u || !BSKY_HOSTS.has(hostOf(u))) return null;
-	const m = /^\/profile\/([^/]+)\/post\/([^/]+)\/?$/.exec(u.pathname);
+	const m = BSKY_PROFILE_PATH.exec(u.pathname);
 	if (!m) return null;
-	const handle = m[1] ?? "";
-	const rkey = m[2] ?? "";
-	if (!BSKY_HANDLE.test(handle) || !BSKY_RKEY.test(rkey)) return null;
-	return `https://bsky.app/profile/${handle}/post/${rkey}`;
+	const host = hostOf(u) === "staging.bsky.app" ? "staging.bsky.app" : "bsky.app";
+	return blueskyCanonical(host, m[1] ?? "", m[2] ?? "");
 }
 
 function gistHref(raw: string): string | null {

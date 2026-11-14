@@ -35,15 +35,17 @@ In Cursor, ask to publish a minor or patch release. The agent:
 | 1. Changeset on a PR | Describe bump in `.changeset/<slug>.md` |
 | 2. Merge to `main` | Release workflow opens Version Packages when a changeset is pending |
 | 3. Version Packages PR | Bumps version + changelog |
-| 4. Merge Version Packages | `release.yml` runs `pnpm release:publish` → npm + GitHub Release |
+| 4. Merge Version Packages | `release.yml` runs `pnpm release:publish` → npm trusted publishing + GitHub Release |
+
+A push to `main` with no pending changeset publishes the version already in `package.json`. A docs-only merge does that too. See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md).
 
 ## Prerequisites
 
 | Credential | Where | Notes |
 |------------|-------|-------|
-| Trusted publisher | npm package settings | GitHub Actions `release.yml` on `EmPlugins/EmPrivacy` may `npm publish`. Provenance is attached automatically. |
-| `gh auth login` | Maintainer machine | PRs and agent merges |
-| Org: Actions create PRs | GitHub org/repo settings | Automatic Version Packages PRs |
+| Trusted publisher | npm package settings | `EmPlugins/EmPrivacy` workflow `release.yml` may `npm publish`. See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md). |
+| `gh auth login` | Maintainer machine | Open and merge pull requests. `git push origin main` is rejected. |
+| Org: Actions create PRs | GitHub org/repo settings | Automatic Version Packages pull requests |
 
 ### GitHub CLI and `GITHUB_TOKEN`
 
@@ -54,9 +56,11 @@ env -u GITHUB_TOKEN gh pr create ...
 
 ### npm auth
 
-Release publishes with GitHub Actions OIDC. `scripts/npm-auth-publish.mjs` removes `NPM_TOKEN` and `NODE_AUTH_TOKEN` from the environment and does not write an npmrc. Do not create a project `.npmrc`. `.gitignore` already ignores `.npmrc`, and the script refuses to publish if one is present.
+Release publishes with npm trusted publishing. `release.yml` sets `id-token: write` and does not pass an npm token. `scripts/npm-auth-publish.mjs` removes `NPM_TOKEN` and `NODE_AUTH_TOKEN`, then runs `npm publish`. Provenance is attached for this public package. Full setup, the trusted-publisher fields, and the token shutdown steps are in [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md).
 
-A local `pnpm release:publish` uses `~/.npmrc` from `npm login` and can prompt for 2FA. Prefer the Release workflow.
+Do not create a project `.npmrc`. The publish script exits when one is present.
+
+A local `pnpm release:publish` uses `~/.npmrc` from `npm login` and can prompt for 2FA. It publishes the npm package only. The GitHub Release is created in Actions. Prefer the Release workflow.
 
 ## Release workflow details
 
@@ -124,16 +128,19 @@ env -u GITHUB_TOKEN gh pr create --base main --head changeset-release/main \
 ### Publish failed after Version Packages merge
 
 1. Check [Actions → Release](https://github.com/EmPlugins/EmPrivacy/actions/workflows/release.yml).
-2. Common causes: inline publish command, missing `id-token: write`, or the trusted publisher workflow filename is not `release.yml`.
-3. Fix with a **minimal PR from `origin/main`**, merge, re-run Release.
+2. Common causes: `npm` older than 11.5.1, missing `id-token: write`, trusted publisher filename other than `release.yml`, a project `.npmrc`, or an `NPM_TOKEN` passed into the job.
+3. Do not put `NPM_TOKEN` back. Fix the workflow or publisher with a pull request from `origin/main`, merge it, and re-run Release only if that version was not already accepted.
 
 ### Local publish fallback
 
 ```bash
 git fetch origin main && git checkout main && git pull origin main
+npm login
 pnpm install
 pnpm release:publish
 ```
+
+This publishes to npm and can prompt for 2FA. It does not create the GitHub Release and it does not update `main`.
 
 ### Verify publish
 
@@ -146,9 +153,9 @@ env -u GITHUB_TOKEN gh release view v<version> --json tagName,url,name
 
 `npm view @emplugins/emprivacy version` can keep showing the previous version until the scan finishes. Use the exact-version URL above.
 
-## npm org credentials (emplugins)
+## npm publish access
 
-See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) for the trusted publisher on the [emplugins](https://www.npmjs.com/org/emplugins) org. Do not add an `NPM_TOKEN` secret to the Release workflow.
+See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md). Release uses the trusted publisher on the [emplugins](https://www.npmjs.com/org/emplugins) org. Do not add an `NPM_TOKEN` secret to the Release workflow.
 
 ## Related
 

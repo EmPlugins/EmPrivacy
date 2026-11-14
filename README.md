@@ -21,13 +21,14 @@
 - **Does not scan the theme** for leftover `gtag`, pixels, or iframes you pasted yourself. Scripts and iframes outside EmPrivacy still load.
 - **Does not geo-locate visitors** or switch EU/US banners automatically.
 - **Does not block first-party EmDash comments**, sessions, or other essential site cookies.
-- **Does not iframe arbitrary hosts.** Mastodon, Gist, Bluesky, X, and link-preview blocks become **https links** (or a YouTube/Vimeo iframe from an allowlisted player host) after consent.
+- **Does not iframe arbitrary hosts.** Mastodon, Gist, Bluesky, X, and link-preview blocks become **https links** (or a YouTube/Vimeo iframe from an allowlisted player host) after consent. Bluesky does not load `embed.bsky.app`.
+- **Does not gate embeds inside Columns or Cover** unless EmPrivacy is registered after `@emdash-cms/plugin-embeds`. On EmDash 1.5+, those blocks render nested embeds from plugin components, not from the `components` prop on the page-level `<PortableText>`.
 - **Is not a sandbox.** It is a **native** plugin (`plugins: []`) and runs with the same trust as your site code.
 - **Is not legal advice** and does not certify GDPR/CCPA/CIPA compliance.
 
 ## Requirements
 
-- **EmDash** `^1.0.1` (**CI-tested with `1.0.1` and `1.4.0`**). EmDash 0.x is not supported.
+- **EmDash** `^1.0.1` (**CI-tested with `1.0.1` and `1.5.0`**). EmDash 0.x is not supported.
 - **Node.js** `>= 22.16` (matches EmDash’s engine requirement).
 - Register as a **native** plugin in **`astro.config`** via `plugins: []` (not `sandboxed: []`). EmPrivacy uses `page:fragments` for the public banner and `componentsEntry` for embed placeholders. See [Page fragments](https://docs.emdashcms.com/plugins/creating-native-plugins/page-fragments/) and [Plugin overview](https://docs.emdashcms.com/plugins/overview/).
 
@@ -41,7 +42,7 @@ npm install @emplugins/emprivacy
 
 Published under the [emplugins](https://www.npmjs.com/org/emplugins) npm org. Source: [github.com/EmPlugins/EmPrivacy](https://github.com/EmPlugins/EmPrivacy). See [EMDASH_COMPAT.md](./EMDASH_COMPAT.md) for EmDash version mapping.
 
-Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^3.0.0`. Versioning: [docs/RELEASES.md](docs/RELEASES.md). Org publish: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
+Use a **semver range** if you want controlled upgrades, for example `@emplugins/emprivacy@^3.0.0`. Versioning: [docs/RELEASES.md](docs/RELEASES.md). How maintainers publish: [docs/NPM_ORG_PUBLISH.md](docs/NPM_ORG_PUBLISH.md).
 
 The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@emplugins/emprivacy`.
 
@@ -70,7 +71,7 @@ The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@empl
 
 2. **Put EmPrivacy first** when other plugins inject `gtag` / analytics in `<head>` (Google Consent Mode must run first).
 
-3. **Put EmPrivacy last** when you want automatic YouTube/Vimeo placeholders (later `blockComponents` win). If you need **both** Consent Mode-first **and** gated embeds, keep EmPrivacy first and pass the wrappers on your Portable Text renderer:
+3. **Put EmPrivacy last** when you want automatic embed placeholders (later `blockComponents` win). On EmDash 1.5 and newer, Columns and Cover render nested embeds with those plugin components only. A `components` prop on your page-level `<PortableText>` does not apply inside those blocks, so register EmPrivacy after `@emdash-cms/plugin-embeds` whenever a column or cover can contain an embed. If you need Consent Mode first **and** gated embeds in one field, keep EmPrivacy first and pass the wrappers on that field's renderer:
 
    ```ts
    import { PortableText } from "emdash/ui";
@@ -81,7 +82,7 @@ The legacy unscoped package `emprivacy` is deprecated; migrate imports to `@empl
    <PortableText value={entry.data.content} components={{ type: emprivacyEmbeds }} />
    ```
 
-   Site-level `components` always win over every plugin.
+   Site-level `components` win for that field. They do not gate embeds nested in Columns or Cover.
 
 4. **Use EmDash page integration** in your layout: `<EmDashHead />`, `<EmDashBodyStart />`, `<EmDashBodyEnd />` with `createPublicPageContext({ Astro, … })`.
 
@@ -116,7 +117,7 @@ stop();
 | Privacy / cookie links | EmDash **Page** path or `https://` URL; resolved with `ctx.url()` |
 | Analytics presets | Cloudflare Web Analytics, Plausible, Fathom, Umami, Simple Analytics, GA4, **GTM (Marketing)**, **Microsoft Clarity (Analytics)**, **Microsoft UET (Marketing)**, None, Custom `https` URLs (SRI and script host allowlist required) |
 | Marketing scripts | Only **https** URLs you list, injected as `<script src>` after marketing consent |
-| Official embeds | Optional placeholders for `@emdash-cms/plugin-embeds` block types; YouTube/Vimeo use allowlisted player URLs (`youtube-nocookie`, `player.vimeo.com`); client re-checks URLs before mount |
+| Official embeds | Optional placeholders for `@emdash-cms/plugin-embeds` block types. YouTube/Vimeo use allowlisted player URLs (`youtube-nocookie`, `player.vimeo.com`). Bluesky becomes a `bsky.app` or `staging.bsky.app` link, including `at://` and `did:plc:` posts. EmPrivacy does not load `embed.bsky.app`. The client re-checks URLs before mount |
 | Re-open preferences | Cookie button (bottom-left); saving reloads so script loading matches the latest choice |
 | Consent cookie | `emprivacy_cc` (`path=/`, `SameSite=Lax`, `Secure` on HTTPS, configurable `Max-Age`, default 180 days), JSON `{ v, f, a, m }` |
 | Vendor list | Derived from settings; shown under Customize; JSON at `/_emdash/api/plugins/emprivacy/vendors` (no tokens) |
@@ -151,9 +152,11 @@ EmPrivacy helps you implement **technical** consent UX and script loading patter
 
 ## Registration order
 
+Plugin order decides which head script runs first and which embed component wins.
+
 - **Consent Mode / other head scripts:** `emprivacyPlugin()` **first** in `plugins`.
-- **Automatic embed placeholders:** `emprivacyPlugin()` **after** `@emdash-cms/plugin-embeds`.
-- **Both:** EmPrivacy first + site-level `PortableText` `components` (see Quick start).
+- **Automatic embed placeholders:** `emprivacyPlugin()` **after** `@emdash-cms/plugin-embeds`. On EmDash 1.5+, this is also what gates embeds inside Columns and Cover.
+- **Consent Mode first, gated embeds in one field:** EmPrivacy first, plus site-level `PortableText` `components` (see Quick start). That does not cover Columns or Cover.
 
 ## Development
 

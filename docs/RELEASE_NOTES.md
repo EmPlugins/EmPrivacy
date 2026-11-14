@@ -4,7 +4,10 @@
 
 ## Changes
 
-No unreleased changes.
+- **EmDash 1.5.0** — CI-tested with EmDash `1.0.1` and `1.5.0`. Peer dependency stays `emdash@^1.0.1`.
+- **Nested embeds** — On EmDash 1.5+, Columns and Cover render nested embed blocks with plugin `blockComponents`. Register EmPrivacy after `@emdash-cms/plugin-embeds` so those embeds stay gated. A page-level `PortableText` `components` prop does not apply inside those blocks.
+- **Bluesky links** — Placeholders accept `bsky.app` URLs, `staging.bsky.app`, and `at://` post URIs, including `did:plc:` profiles. After consent the block is a link to the canonical post URL. EmPrivacy does not load `embed.bsky.app`.
+- **Admin name** — The Plugins list on EmDash 1.5+ shows “EmPrivacy” and a short description. Older EmDash versions ignore those fields.
 
 # emprivacy v3.2.1
 
