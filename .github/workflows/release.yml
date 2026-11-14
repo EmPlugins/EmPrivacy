@@ -13,6 +13,7 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   release:
@@ -35,9 +36,18 @@ jobs:
           git config --local --unset-all http.https://github.com/.extraheader
       - name: Install Node.js and pnpm
         run: bash scripts/ci-toolchain.sh
+      - name: Require npm 11.5.1 or newer
+        run: |
+          set -euo pipefail
+          node -p 'process.version'
+          npm -v
+          if ! npm -v | awk -F. '{ if ($1<11 || ($1==11 && ($2<5 || ($2==5 && $3<1)))) exit 1 }'; then
+            echo "npm must be >= 11.5.1 for trusted publishing." >&2
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Version packages or publish
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/release-or-version.mjs

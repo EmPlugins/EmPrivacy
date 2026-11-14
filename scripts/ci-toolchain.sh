@@ -4,9 +4,9 @@
 # the EmPlugins org allows only actions defined in this repository.
 set -euo pipefail
 
-NODE_VERSION="v22.23.3"
+NODE_VERSION="v26.13.0"
 TARBALL="node-${NODE_VERSION}-linux-x64.tar.xz"
-SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"
+SHA256="d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997"
 PREFIX="${RUNNER_TEMP:-/tmp}/node-${NODE_VERSION}"
 
 tmpdir="$(mktemp -d)"

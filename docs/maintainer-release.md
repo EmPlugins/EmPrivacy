@@ -74,7 +74,9 @@ publish: pnpm release:publish
 
 ### CI pnpm setup
 
-The EmPlugins organization allows only Actions defined in this repository (`local_only`). `ci.yml` and `release.yml` must not `uses:` marketplace actions such as `actions/checkout` or `changesets/action`. Checkout is a local `git fetch`, Node.js is the pinned tarball in `scripts/ci-toolchain.sh` (checksum verified), and Version Packages / npm publish / GitHub Release are `scripts/release-or-version.mjs`.
+CI and Release install Node.js from [`scripts/ci-toolchain.sh`](../scripts/ci-toolchain.sh). That script pins Node.js 26.13.0, checks the linux tarball checksum, and activates pnpm 9.15.4. The package allows Node `>= 22.16`, so the test job uses this same Node. Release then runs `npm -v` and stops if npm is older than 11.5.1. Trusted publishing needs that CLI. Node 22 bundles npm 10 and fails the check.
+
+The EmPlugins organization allows only Actions defined in this repository (`local_only`). `ci.yml` and `release.yml` must not `uses:` marketplace actions such as `actions/checkout` or `changesets/action`. Checkout is a local `git fetch`, and Version Packages / npm publish / GitHub Release are `scripts/release-or-version.mjs`.
 
 Do **not** set `version:` on a pnpm setup action when `package.json` has `"packageManager": "pnpm@…"`. `scripts/ci-toolchain.sh` prepares that exact pnpm.
 
