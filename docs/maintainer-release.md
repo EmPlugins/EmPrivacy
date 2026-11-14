@@ -41,7 +41,7 @@ In Cursor, ask to publish a minor or patch release. The agent:
 
 | Credential | Where | Notes |
 |------------|-------|-------|
-| `NPM_TOKEN` | GitHub repo secret | Automation/granular token with publish on **emplugins** org (`@emplugins/emprivacy`); 2FA bypass for CI |
+| Trusted publisher | npm package settings | GitHub Actions `release.yml` on `EmPlugins/EmPrivacy` may `npm publish`. Provenance is attached automatically. |
 | `gh auth login` | Maintainer machine | PRs and agent merges |
 | Org: Actions create PRs | GitHub org/repo settings | Automatic Version Packages PRs |
 
@@ -54,12 +54,9 @@ env -u GITHUB_TOKEN gh pr create ...
 
 ### npm auth
 
-Local credentials belong in `~/.npmrc` from `npm login`. Do not create a project `.npmrc` with `_authToken`. `.gitignore` already ignores `.npmrc`, and `scripts/npm-auth-publish.mjs` refuses to publish if one is present. CI reads `NPM_TOKEN` into a temporary user config outside the repo.
+Release publishes with GitHub Actions OIDC. `scripts/npm-auth-publish.mjs` removes `NPM_TOKEN` and `NODE_AUTH_TOKEN` from the environment and does not write an npmrc. Do not create a project `.npmrc`. `.gitignore` already ignores `.npmrc`, and the script refuses to publish if one is present.
 
-### npm 2FA
-
-- **CI publish** uses `NPM_TOKEN` — no OTP.
-- **Local** `pnpm release:publish` may prompt for OTP; prefer CI.
+A local `pnpm release:publish` uses `~/.npmrc` from `npm login` and can prompt for 2FA. Prefer the Release workflow.
 
 ## Release workflow details
 
@@ -127,7 +124,7 @@ env -u GITHUB_TOKEN gh pr create --base main --head changeset-release/main \
 ### Publish failed after Version Packages merge
 
 1. Check [Actions → Release](https://github.com/EmPlugins/EmPrivacy/actions/workflows/release.yml).
-2. Common causes: inline publish command, missing/invalid `NPM_TOKEN`, 2FA on a non-automation token.
+2. Common causes: inline publish command, missing `id-token: write`, or the trusted publisher workflow filename is not `release.yml`.
 3. Fix with a **minimal PR from `origin/main`**, merge, re-run Release.
 
 ### Local publish fallback
@@ -151,11 +148,11 @@ env -u GITHUB_TOKEN gh release view v<version> --json tagName,url,name
 
 ## npm org credentials (emplugins)
 
-See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) for creating an Automation token on the [emplugins](https://www.npmjs.com/org/emplugins) org and setting `NPM_TOKEN` on this GitHub repo.
+See [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) for the trusted publisher on the [emplugins](https://www.npmjs.com/org/emplugins) org. Do not add an `NPM_TOKEN` secret to the Release workflow.
 
 ## Related
 
-- [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) — token + first publish checklist
+- [NPM_ORG_PUBLISH.md](./NPM_ORG_PUBLISH.md) — trusted publisher and publish check
 - [release-checklist.md](./release-checklist.md)
 - [RELEASES.md](./RELEASES.md) — semver policy
 - [`.cursor/skills/feature-release/`](../.cursor/skills/feature-release/SKILL.md) — agent-driven minor/patch publish

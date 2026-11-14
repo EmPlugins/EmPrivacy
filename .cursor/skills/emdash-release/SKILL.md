@@ -63,7 +63,7 @@ Before every `git add`, `git commit`, and `git push`:
 3. Read the staged diff. If any line assigns a secret (`_authToken=`, `npm_` plus a token, `ghp_`, `github_pat_`, `gho_`, `Bearer `, `BEGIN PRIVATE KEY`, or `NPM_TOKEN=` / `NODE_AUTH_TOKEN=` / `GITHUB_TOKEN=` followed by a value), unstage it and stop. Do not commit. Do not push.
 4. Do not put a secret in a commit message, pull request body, workflow file, or log that will be committed.
 
-Naming `NPM_TOKEN` as the GitHub Actions secret is fine. Pasting its value is not. Publish auth stays in that Actions secret, or in `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
+Release publishes with GitHub Actions OIDC. Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to `release.yml`. A local publish uses `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
 
 ## Definitions
 
@@ -183,7 +183,7 @@ Merge as soon as the Version Packages PR exists. Do not watch its checks. CI on 
 env -u GITHUB_TOKEN gh pr merge <number> --squash
 ```
 
-Merging triggers `.github/workflows/release.yml` → `pnpm release:publish` → npm + GitHub Release (`NPM_TOKEN` repo secret).
+Merging triggers `.github/workflows/release.yml` → `pnpm release:publish` → npm trusted publishing + GitHub Release.
 
 ### 8. Verify publish
 
@@ -214,5 +214,5 @@ If publish fails, open a **minimal fix PR from `origin/main`** (typically `packa
 2. Use `env -u GITHUB_TOKEN` for all `gh` commands when the env var overrides keyring auth.
 3. Never skip `pnpm emdash:conformance` before the compat PR.
 4. All `publishablePackages` share the same changeset bump type.
-5. Complete through npm + GitHub Release verification — do not leave Version Packages for the user unless merge is impossible (permissions / missing `NPM_TOKEN`).
+5. Complete through npm + GitHub Release verification — do not leave Version Packages for the user unless merge is impossible because of permissions.
 6. Never push a token or other credential. No project `.npmrc`. No `git add -A` or `git add .`.

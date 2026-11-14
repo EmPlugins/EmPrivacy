@@ -37,7 +37,7 @@ Before every `git add`, `git commit`, and `git push`:
 3. Read the staged diff. If any line assigns a secret (`_authToken=`, `npm_` plus a token, `ghp_`, `github_pat_`, `gho_`, `Bearer `, `BEGIN PRIVATE KEY`, or `NPM_TOKEN=` / `NODE_AUTH_TOKEN=` / `GITHUB_TOKEN=` followed by a value), unstage it and stop. Do not commit. Do not push.
 4. Do not put a secret in a commit message, pull request body, workflow file, or log that will be committed.
 
-Naming `NPM_TOKEN` as the GitHub Actions secret is fine. Pasting its value is not. Publish auth stays in that Actions secret, or in `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
+Release publishes with GitHub Actions OIDC. Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to `release.yml`. A local publish uses `~/.npmrc` from `npm login`. Never write a project `.npmrc`.
 
 ## Version ownership
 
@@ -164,5 +164,5 @@ If the Release job failed before the `+ @emplugins/emprivacy@` line, see [docs/m
 4. Squash-merge the feature pull request only after its CI is green.
 5. Merge Version Packages without waiting on its CI.
 6. Treat a registry 404 as success-plus-scan until 15 minutes after the `+ @emplugins/emprivacy@` log line.
-7. Finish through npm availability and the GitHub Release. Leave Version Packages unmerged only when merge is impossible (permissions or a missing `NPM_TOKEN`).
+7. Finish through npm availability and the GitHub Release. Leave Version Packages unmerged only when merge is impossible because of permissions.
 8. Never push a token or other credential. No project `.npmrc`. No `git add -A` or `git add .`.

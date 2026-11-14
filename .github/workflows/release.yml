@@ -49,5 +49,4 @@ jobs:
       - name: Version packages or publish
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node scripts/release-or-version.mjs
